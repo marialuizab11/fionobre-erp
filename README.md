@@ -1,11 +1,16 @@
-FioNobre ERP - Sistema de Gestão Industrial
-Este projeto consiste no desenvolvimento de um ERP simplificado focado na integração operacional, persistência de dados e suporte à decisão, desenvolvido como parte da disciplina de Sistemas de Informação e Tecnologias (2026.1).
+# 🏭 FioNobre ERP - Sistema de Gestão Industrial
 
-🏗️ Arquitetura do Sistema
-O sistema foi estruturado seguindo o princípio de separação de responsabilidades, garantindo que a lógica de negócio, a persistência de dados e a interface visual sejam modulares e facilmente manteníveis.
+Este projeto consiste no desenvolvimento de um **ERP simplificado** focado na integração operacional, persistência de dados e suporte à decisão, desenvolvido como parte da disciplina de **Sistemas de Informação e Tecnologias (2026.1)**.
 
-Estrutura de Pastas
-Plaintext
+---
+
+# 🏗️ Arquitetura do Sistema
+
+O sistema foi estruturado seguindo o princípio de **separação de responsabilidades**, garantindo que a lógica de negócio, a persistência de dados e a interface visual sejam modulares e facilmente manteníveis.
+
+## 📂 Estrutura de Pastas
+
+```text
 fionobre-erp/
 ├── config/              # Configurações globais e carregamento de variáveis de ambiente
 ├── src/
@@ -16,54 +21,127 @@ fionobre-erp/
 ├── .env.example         # Template de configuração de ambiente
 ├── requirements.txt     # Dependências do projeto
 └── README.md            # Documentação do projeto
-Responsabilidades
-database/: Contém o modelo de dados completo do projeto (MER) traduzido para código. É a base de integridade das operações.
+```
 
-services/: O "cérebro" do ERP. Todas as operações integradas (como a baixa de estoque automática ao realizar uma venda) são processadas aqui.
+## 📋 Responsabilidades
 
-views/: Camada de apresentação. Responsável por capturar os inputs do usuário via Streamlit e exibir os resultados processados.
+### 📁 `database/`
 
-🚀 Como rodar o sistema
-Para configurar o ambiente de desenvolvimento localmente, siga os passos abaixo:
+Contém o modelo de dados completo do projeto (MER) traduzido para código. É responsável pela persistência das informações e pela integridade das operações realizadas no sistema.
 
-1. Pré-requisitos
-Python 3.11+ instalado.
+### ⚙️ `services/`
 
-PostgreSQL instalado e em execução.
+Representa o **cérebro do ERP**. Toda a lógica de negócio é implementada nesta camada, incluindo processos integrados, como:
 
-Um banco de dados criado (ex: fio_nobre_db).
+- Baixa automática de estoque após uma venda;
+- Processamento de faturamento;
+- Validação de regras de negócio;
+- Fluxos operacionais do sistema.
 
-2. Instalação de dependências
-Na raiz do projeto, instale as bibliotecas necessárias:
+### 🖥️ `views/`
 
-Bash
+Camada de apresentação da aplicação. Responsável por:
+
+- Capturar os dados inseridos pelo usuário;
+- Exibir informações e resultados;
+- Construir toda a interface utilizando **Streamlit**.
+
+---
+
+# 🚀 Como rodar o sistema
+
+## 1️⃣ Pré-requisitos
+
+Antes de iniciar, certifique-se de possuir:
+
+- Python **3.11** ou superior;
+- PostgreSQL instalado e em execução;
+- Um banco de dados criado (exemplo: `fio_nobre_db`).
+
+---
+
+## 2️⃣ Instalação das dependências
+
+Na raiz do projeto, execute:
+
+```bash
 pip install -r requirements.txt
-3. Configuração de Variáveis de Ambiente
-O projeto utiliza um arquivo .env para proteger suas credenciais locais.
+```
 
-Na raiz do projeto, copie o arquivo de exemplo:
+---
 
-Bash
+## 3️⃣ Configuração das variáveis de ambiente
+
+O projeto utiliza um arquivo `.env` para armazenar as credenciais do banco de dados.
+
+Primeiro, copie o arquivo de exemplo:
+
+```bash
 cp .env.example .env
-Edite o arquivo .env criado com as credenciais do seu banco de dados local:
+```
 
-Plaintext
+Depois, edite o arquivo `.env` preenchendo as informações do seu banco:
+
+```env
 DB_USER=seu_usuario
 DB_PASSWORD=sua_senha
 DB_HOST=localhost
 DB_PORT=5432
 DB_NAME=fio_nobre_db
-4. Inicialização do Banco de Dados
-Para garantir que as tabelas existam no seu banco de dados local, execute o script de inicialização pela primeira vez:
+```
 
-Bash
+---
+
+## 4️⃣ Inicialização do banco de dados
+
+Na primeira execução, crie as tabelas do banco executando:
+
+```bash
 python teste_banco.py
-5. Executando o ERP
-Para iniciar a aplicação Streamlit:
+```
 
-Bash
+---
+
+## 5️⃣ Executando o ERP
+
+Inicie a aplicação com o Streamlit:
+
+```bash
 streamlit run app.py
-Desenvolvido por: Maria Luiza Bezerra dos Santos e equipe.
+```
 
-Dica para o Git
-Note que o arquivo .env foi adicionado ao .gitignore para evitar o compartilhamento acidental de senhas. Nunca suba o seu arquivo .env com senhas reais para o repositório.
+Após a execução, o sistema estará disponível no navegador.
+
+---
+
+# 👨‍💻 Tecnologias Utilizadas
+
+- Python
+- Streamlit
+- PostgreSQL
+- SQLAlchemy (ORM)
+- Python-dotenv
+- Git e GitHub
+
+---
+
+# 🔒 Boas práticas
+
+> **Importante:** O arquivo `.env` está listado no `.gitignore` para impedir o compartilhamento de informações sensíveis.
+
+**Nunca envie seu arquivo `.env` para o GitHub**, pois ele contém credenciais do banco de dados.
+
+Utilize apenas o arquivo **`.env.example`** para servir como modelo de configuração.
+
+---
+
+# 👥 Desenvolvedores
+
+Projeto desenvolvido por:
+ _pendente_
+
+---
+
+## 📄 Licença
+
+Este projeto foi desenvolvido para fins acadêmicos na disciplina de **Sistemas de Informação e Tecnologias (2026.1)**.
