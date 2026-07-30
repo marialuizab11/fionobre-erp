@@ -1,0 +1,7 @@
+[theme]
+base = "light"
+primaryColor = "#2E7D32"         # Verde principal para destaques e botões
+backgroundColor = "#F4F9F5"      # Fundo geral com tom pastel esverdeado muito suave
+secondaryBackgroundColor = "#E3EDF7" # Fundo de blocos/sidebar em tom pastel azulado
+textColor = "#1F2937"            # Texto escuro para legibilidade perfeita
+font = "sans serif"
