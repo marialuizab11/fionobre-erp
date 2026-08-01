@@ -3,6 +3,7 @@ import os
 import streamlit as st
 
 from src.views.estoque_view import render_estoque
+from src.views.logistica_view import render_logistica
 from src.views.vendas_view import render_vendas
 
 # Garante o path para importar o backend
@@ -37,8 +38,7 @@ if pagina == "📦 Controle de Estoque":
     render_estoque()
 
 elif pagina == "🚚 Gestão Logística":
-    render_cabecalho("Painel Logístico", "Monitore o status das entregas, fretes e prazos.")
-    st.write("*(Aqui carregaremos o painel de transportes em breve)*")
+    render_logistica()
 
 elif pagina == "🛒 Pedidos de Venda":
     render_vendas()
