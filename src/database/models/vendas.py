@@ -22,6 +22,7 @@ class PedidoVenda(Base):
     
     # Composição (Relacionamento Fraco): Se deletar o pedido, os itens somem junto
     itens = relationship("ItemVenda", back_populates="pedido", cascade="all, delete-orphan")
+    lancamentos = relationship("LancamentoFinanceiro", back_populates="pedido_venda", cascade="all, delete-orphan")
 
 
 class ItemVenda(Base):
