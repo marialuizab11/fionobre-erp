@@ -3,6 +3,7 @@ import os
 import streamlit as st
 
 from src.views.estoque_view import render_estoque
+from src.views.vendas_view import render_vendas
 
 # Garante o path para importar o backend
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -35,10 +36,9 @@ st.sidebar.info("Sistema integrado de apoio à decisão (2026.1).")
 if pagina == "📦 Controle de Estoque":
     render_estoque()
 
-elif pagina == "🛒 Pedidos de Venda":
-    render_cabecalho("Central de Vendas", "Lance novos pedidos e dispare a baixa automática de estoque.")
-    st.write("*(Aqui carregaremos o formulário de vendas em breve)*")
-
 elif pagina == "🚚 Gestão Logística":
     render_cabecalho("Painel Logístico", "Monitore o status das entregas, fretes e prazos.")
     st.write("*(Aqui carregaremos o painel de transportes em breve)*")
+
+elif pagina == "🛒 Pedidos de Venda":
+    render_vendas()
