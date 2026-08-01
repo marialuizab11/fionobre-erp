@@ -54,7 +54,6 @@ def modal_resumo_pedido(id_cliente, carrinho_itens, valor_frete):
                 )
                 
                 st.session_state.carrinho_itens = []
-                st.session_state.mensagem_sucesso = f"✅ Pedido #ID {pedido.id_pedido_venda} fechado com sucesso! Valor Total: R$ {pedido.valor_total_pedido:.2f}"
                 st.rerun()
                 
             except Exception as e:
