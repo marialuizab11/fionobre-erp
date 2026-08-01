@@ -14,7 +14,6 @@ def modal_resumo_pedido(id_cliente, carrinho_itens, valor_frete):
     for item in carrinho_itens:
         subtotal = item['quantidade'] * item['valor_unitario']
         valor_total_itens += subtotal
-        # O cifrão está escapado com \ para evitar o modo LaTeX do Streamlit
         st.write(f"- {int(item['quantidade'])}x {item['descricao']} (R\\$ {item['valor_unitario']:.2f} un) = **R\\$ {subtotal:.2f}**")
     
     valor_total_compra = valor_total_itens + valor_frete
@@ -69,10 +68,9 @@ def modal_resumo_pedido(id_cliente, carrinho_itens, valor_frete):
 
 
 def render_vendas():
-    # Exibe a notificação de sucesso se a variável foi definida no modal
     if "mensagem_sucesso" in st.session_state:
         st.success(st.session_state.mensagem_sucesso)
-        st.balloons()
+        st.toast("Pedido realizado!", icon="✅")
         del st.session_state.mensagem_sucesso
 
     render_cabecalho("Central de Vendas", "Lance pedidos com múltiplos itens, controle saldos e dispare a logística.")
@@ -94,16 +92,13 @@ def render_vendas():
         st.markdown("---")
         st.subheader("📦 Itens do Pedido (Carrinho)")
 
-        # Inicializa o carrinho na sessão do Streamlit
         if "carrinho_itens" not in st.session_state:
             st.session_state.carrinho_itens = []
 
-        # Formulário para adicionar um item à lista temporária
         with st.form("form_adicionar_item", clear_on_submit=False):
             item_map = {f"{i.descricao} (Disponível: {i.saldo_estoque} {i.unidade_medida})": i for i in itens}
             item_selecionado_str = st.selectbox("Selecionar Produto / Matéria-Prima", list(item_map.keys()))
             
-            # Garante que um item foi de fato selecionado
             item_obj = item_map.get(item_selecionado_str)
             
             col_qnt, col_val = st.columns(2)
@@ -115,7 +110,6 @@ def render_vendas():
             btn_adicionar = st.form_submit_button("➕ Adicionar Item ao Carrinho")
             
             if btn_adicionar:
-                # 1. Verifica a quantidade deste item que JÁ ESTÁ no carrinho
                 qtd_ja_no_carrinho = 0
                 if item_obj:
                     qtd_ja_no_carrinho = sum(
@@ -125,7 +119,6 @@ def render_vendas():
                 
                 qtd_total_desejada = qtd_ja_no_carrinho + float(quantidade)
 
-                # Validações estruturadas
                 if not item_obj:
                     st.error("❌ Um produto válido deve ser selecionado.")
                 elif quantidade <= 0:
@@ -151,11 +144,9 @@ def render_vendas():
                         })
                         st.success(f"Item '{item_obj.descricao}' adicionado ao carrinho com sucesso!")
 
-        # Exibe os itens já adicionados no carrinho
         if st.session_state.carrinho_itens:
             st.markdown("#### Itens na Composição do Pedido:")
             
-            # Tabela resumida do carrinho
             for idx, item_carrinho in enumerate(st.session_state.carrinho_itens):
                 cols = st.columns([3, 1, 1, 1])
                 with cols[0]:
@@ -174,15 +165,12 @@ def render_vendas():
             
             valor_frete = st.number_input("Valor do Frete (R$)", value=0.00, step=10.0)
             
-            # Botão que agora chama o modal ao invés de processar o backend direto
             if st.button("Finalizar e Confirmar Pedido de Venda", type="primary"):
-                # Validações de fechamento antes de abrir o modal
                 if len(st.session_state.carrinho_itens) == 0:
                     st.error("❌ A venda deve conter pelo menos um item associado.")
                 elif valor_frete < 0:
                     st.error("❌ O valor do frete não pode ser negativo.")
                 else:
-                    # Chama o modal e passa os dados atuais para a tela de confirmação
                     modal_resumo_pedido(id_cliente, st.session_state.carrinho_itens, valor_frete)
         else:
             st.info("ℹ️ O carrinho está vazio. Adicione pelo menos um produto para conseguir finalizar a venda.")
