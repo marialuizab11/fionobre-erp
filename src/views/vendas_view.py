@@ -12,7 +12,7 @@ def resetar_formulario():
     st.session_state.carrinho_itens = []
 
 @st.dialog("Resumo do Pedido")
-def modal_resumo_pedido(id_cliente, carrinho_itens, valor_frete, modalidade_entrega, condicao_pagamento, data_vencimento):
+def modal_resumo_pedido(id_cliente, carrinho_itens, valor_frete, modalidade_entrega, data_previsao_entrega, condicao_pagamento, data_vencimento):
     st.write("Confira os detalhes do pedido antes de finalizar:")
     
     valor_total_itens = 0
@@ -44,7 +44,7 @@ def modal_resumo_pedido(id_cliente, carrinho_itens, valor_frete, modalidade_entr
     
     st.subheader("Faturamento e Entrega")
     col_mod, col_cond, col_venc = st.columns(3)
-    col_mod.write(f"**Modalidade:**\n{modalidade_entrega}")
+    col_mod.write(f"**Modalidade:**\n{modalidade_entrega}\n\n**Prev. Sistêmica:** {data_previsao_entrega.strftime('%d/%m/%Y')}")
     col_cond.write(f"**Condição:**\n{condicao_pagamento}")
     col_venc.write(f"**Vencimento Base:**\n{data_vencimento.strftime('%d/%m/%Y')}")
     
@@ -74,7 +74,7 @@ def modal_resumo_pedido(id_cliente, carrinho_itens, valor_frete, modalidade_entr
                 criar_entrega_para_pedido(
                     db=db,
                     id_pedido=pedido.id_pedido_venda,
-                    data_previsao=datetime.now() + timedelta(days=3), 
+                    data_previsao=data_previsao_entrega, 
                     valor_frete=valor_frete
                 )
 
@@ -208,13 +208,15 @@ def render_vendas():
             )
             
             if modalidade_entrega == "Entrega Padrão (Logística Interna / Transportadora)":
+                data_previsao_entrega = datetime.now() + timedelta(days=9)
                 valor_frete = st.number_input("Valor do Frete (R$)", value=0.00, step=10.0)
                 
                 endereco_completo = f"{cliente_obj.rua or 'N/A'}, {cliente_obj.numero or 'S/N'} - {cliente_obj.bairro or 'N/A'}, {cliente_obj.cidade or 'N/A'} - {cliente_obj.uf or 'N/A'} (CEP: {cliente_obj.cep or 'N/A'})"
-                st.info(f"Endereço de Entrega (Base Cadastral):\n\n{endereco_completo}")
+                st.info(f"Endereço de Entrega (Base Cadastral):\n\n{endereco_completo}\n\n**Prazo Estimado:** 9 dias úteis (Previsão: {data_previsao_entrega.strftime('%d/%m/%Y')})")
             else:
+                data_previsao_entrega = datetime.now() + timedelta(days=1)
                 valor_frete = 0.00
-                st.info("Retirada / Externa: O frete será isento (R$ 0,00) e a logística é de responsabilidade do cliente.")
+                st.info(f"Retirada / Externa: O frete será isento (R$ 0,00) e a logística é de responsabilidade do cliente.\n\n**Prazo para Separação:** 1 dia útil (Previsão: {data_previsao_entrega.strftime('%d/%m/%Y')})")
                 
             st.markdown("---")
             
@@ -245,6 +247,7 @@ def render_vendas():
                         st.session_state.carrinho_itens, 
                         valor_frete, 
                         modalidade_entrega,
+                        data_previsao_entrega,
                         condicao_pagamento, 
                         data_vencimento
                     )
