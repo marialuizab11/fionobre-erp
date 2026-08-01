@@ -6,7 +6,75 @@ from src.services.venda_service import criar_pedido_venda
 from src.services.logistica_service import criar_entrega_para_pedido
 from src.views.components.ui_components import render_cabecalho
 
+@st.dialog("Resumo do Pedido")
+def modal_resumo_pedido(id_cliente, carrinho_itens, valor_frete):
+    st.write("Confira os detalhes do pedido antes de finalizar:")
+    
+    valor_total_itens = 0
+    for item in carrinho_itens:
+        subtotal = item['quantidade'] * item['valor_unitario']
+        valor_total_itens += subtotal
+        # O cifrão está escapado com \ para evitar o modo LaTeX do Streamlit
+        st.write(f"- {int(item['quantidade'])}x {item['descricao']} (R\\$ {item['valor_unitario']:.2f} un) = **R\\$ {subtotal:.2f}**")
+    
+    valor_total_compra = valor_total_itens + valor_frete
+    
+    st.markdown("---")
+    st.write(f"**Total dos Itens:** R\\$ {valor_total_itens:.2f}")
+    st.write(f"**Valor do Frete:** R\\$ {valor_frete:.2f}")
+    st.subheader(f"Total da Compra: R\\$ {valor_total_compra:.2f}")
+    st.markdown("---")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("✅ Confirmar Pedido", type="primary", use_container_width=True):
+            db = SessionLocal()
+            try:
+                carrinho_payload = [
+                    {
+                        "id_item": i["id_item"],
+                        "quantidade": i["quantidade"],
+                        "valor_unitario": i["valor_unitario"]
+                    }
+                    for i in carrinho_itens
+                ]
+                
+                pedido = criar_pedido_venda(
+                    db=db,
+                    id_cliente=id_cliente,
+                    itens_comprados=carrinho_payload,
+                    id_usuario=1
+                )
+                
+                data_previsao_entrega = datetime.now() + timedelta(days=3)
+                criar_entrega_para_pedido(
+                    db=db,
+                    id_pedido=pedido.id_pedido_venda,
+                    data_previsao=data_previsao_entrega,
+                    valor_frete=valor_frete
+                )
+                
+                st.session_state.carrinho_itens = []
+                st.session_state.mensagem_sucesso = f"✅ Pedido #ID {pedido.id_pedido_venda} fechado com sucesso! Valor Total: R$ {pedido.valor_total_pedido:.2f}"
+                st.rerun()
+                
+            except Exception as e:
+                st.error(f"❌ Erro ao fechar pedido: {e}")
+            finally:
+                db.close()
+                
+    with col2:
+        if st.button("❌ Cancelar", use_container_width=True):
+            st.rerun()
+
+
 def render_vendas():
+    # Exibe a notificação de sucesso se a variável foi definida no modal
+    if "mensagem_sucesso" in st.session_state:
+        st.success(st.session_state.mensagem_sucesso)
+        st.balloons()
+        del st.session_state.mensagem_sucesso
+
     render_cabecalho("Central de Vendas", "Lance pedidos com múltiplos itens, controle saldos e dispare a logística.")
     
     db = SessionLocal()
@@ -47,7 +115,7 @@ def render_vendas():
             btn_adicionar = st.form_submit_button("➕ Adicionar Item ao Carrinho")
             
             if btn_adicionar:
-                # 1. Verifica a quantidade deste item que JÁ ESTÁ no carrinho (antes da validação principal)
+                # 1. Verifica a quantidade deste item que JÁ ESTÁ no carrinho
                 qtd_ja_no_carrinho = 0
                 if item_obj:
                     qtd_ja_no_carrinho = sum(
@@ -57,7 +125,7 @@ def render_vendas():
                 
                 qtd_total_desejada = qtd_ja_no_carrinho + float(quantidade)
 
-                # Validações estruturadas com if/elif em vez de st.stop()
+                # Validações estruturadas
                 if not item_obj:
                     st.error("❌ Um produto válido deve ser selecionado.")
                 elif quantidade <= 0:
@@ -67,12 +135,10 @@ def render_vendas():
                 elif qtd_total_desejada > float(item_obj.saldo_estoque):
                     st.error(f"❌ Estoque insuficiente. Você já tem {qtd_ja_no_carrinho} no carrinho e está tentando adicionar mais {quantidade}. O total do estoque é {item_obj.saldo_estoque}.")
                 else:
-                    # Se chegou no else, todas as validações passaram
                     item_existente = next((item for item in st.session_state.carrinho_itens if item['id_item'] == item_obj.id_item), None)
                     
                     if item_existente:
                         item_existente['quantidade'] += float(quantidade)
-                        # Atualiza o preço unitário para refletir a última alteração, se houver
                         item_existente['valor_unitario'] = float(preco_unitario) 
                         st.success(f"Quantidade do item '{item_obj.descricao}' atualizada no carrinho com sucesso!")
                     else:
@@ -85,7 +151,7 @@ def render_vendas():
                         })
                         st.success(f"Item '{item_obj.descricao}' adicionado ao carrinho com sucesso!")
 
-        # Exibe os itens já adicionados no carrinho (continua renderizando normalmente)
+        # Exibe os itens já adicionados no carrinho
         if st.session_state.carrinho_itens:
             st.markdown("#### Itens na Composição do Pedido:")
             
@@ -106,53 +172,18 @@ def render_vendas():
             st.markdown("---")
             st.subheader("🚚 Dados Logísticos e Fechamento")
             
-            # Removido min_value para permitir validação manual
             valor_frete = st.number_input("Valor do Frete (R$)", value=0.00, step=10.0)
             
+            # Botão que agora chama o modal ao invés de processar o backend direto
             if st.button("Finalizar e Confirmar Pedido de Venda", type="primary"):
-                # Validações de fechamento
+                # Validações de fechamento antes de abrir o modal
                 if len(st.session_state.carrinho_itens) == 0:
                     st.error("❌ A venda deve conter pelo menos um item associado.")
                 elif valor_frete < 0:
                     st.error("❌ O valor do frete não pode ser negativo.")
                 else:
-                    try:
-                        # Prepara o formato esperado pelo backend
-                        carrinho_payload = [
-                            {
-                                "id_item": i["id_item"],
-                                "quantidade": i["quantidade"],
-                                "valor_unitario": i["valor_unitario"]
-                            }
-                            for i in st.session_state.carrinho_itens
-                        ]
-                        
-                        # 1. Cria o pedido e abate estoques no backend
-                        pedido = criar_pedido_venda(
-                            db=db,
-                            id_cliente=id_cliente,
-                            itens_comprados=carrinho_payload,
-                            id_usuario=1
-                        )
-                        
-                        # 2. Gera a entrega vinculada
-                        data_previsao_entrega = datetime.now() + timedelta(days=3)
-                        criar_entrega_para_pedido(
-                            db=db,
-                            id_pedido=pedido.id_pedido_venda,
-                            data_previsao=data_previsao_entrega,
-                            valor_frete=valor_frete
-                        )
-                        
-                        st.success(f"✅ Pedido #ID {pedido.id_pedido_venda} fechado com sucesso! Valor Total: R$ {pedido.valor_total_pedido:.2f}")
-                        st.balloons()
-                        
-                        # Limpa o carrinho após o sucesso
-                        st.session_state.carrinho_itens = []
-                        st.rerun()
-                        
-                    except Exception as e:
-                        st.error(f"❌ Erro ao fechar pedido: {e}")
+                    # Chama o modal e passa os dados atuais para a tela de confirmação
+                    modal_resumo_pedido(id_cliente, st.session_state.carrinho_itens, valor_frete)
         else:
             st.info("ℹ️ O carrinho está vazio. Adicione pelo menos um produto para conseguir finalizar a venda.")
 
