@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
 from src.database.connection import SessionLocal
+from src.database.models.vendas import PedidoVenda
 from src.services.venda_service import listar_pedidos, cancelar_venda
 from src.services.logistica_service import listar_historico_entrega
 from src.views.components.ui_components import render_cabecalho
@@ -58,6 +59,68 @@ def modal_cancelar_pedido(id_pedido):
     with col2:
         if st.button("Voltar", use_container_width=True):
             st.rerun()
+
+@st.dialog("Detalhes do Pedido", width="large")
+def modal_detalhes_pedido(id_pedido):
+    db = SessionLocal()
+    try:
+        # Busca o pedido fresco do banco para carregar os relacionamentos sem erro de sessão
+        pedido = db.query(PedidoVenda).filter(PedidoVenda.id_pedido_venda == id_pedido).first()
+        
+        if not pedido:
+            st.error("Pedido não encontrado.")
+            return
+
+        col_cli, col_status = st.columns(2)
+        
+        with col_cli:
+            st.markdown("### 🛒 Informações Gerais")
+            cliente_nome = pedido.cliente.razao_social if pedido.cliente else "Desconhecido"
+            st.write(f"**Cliente:** {cliente_nome}")
+            st.write(f"**Data da Venda:** {pedido.data_venda.strftime('%d/%m/%Y %H:%M')}")
+            st.write(f"**Valor Total:** R$ {pedido.valor_total_pedido:.2f}")
+
+        with col_status:
+            st.markdown("### 🚦 Status Cruzado")
+            st.write(f"**Operacional (Venda):** {pedido.status_venda}")
+            
+            # Busca status Logístico
+            if pedido.entrega:
+                st.write(f"**Logística:** {pedido.entrega.status_logistica}")
+            else:
+                st.write("**Logística:** Retirada na Loja / Sem entrega")
+                
+            # Busca status Financeiro
+            if pedido.lancamentos:
+                status_fin = pedido.lancamentos[0].status_pagamento
+                st.write(f"**Financeiro:** {status_fin}")
+            else:
+                st.write("**Financeiro:** Sem lançamento")
+
+        st.divider()
+        st.markdown("### 📦 Itens Comprados")
+        
+        dados_itens = []
+        for iv in pedido.itens:
+            desc = iv.item.descricao if iv.item else f"Item ID {iv.id_item}"
+            subtotal = float(iv.quantidade_vendida * iv.valor_unitario)
+            dados_itens.append({
+                "Produto": desc,
+                "Qtd": float(iv.quantidade_vendida),
+                "Vlr. Unitário (R$)": f"{float(iv.valor_unitario):.2f}",
+                "Subtotal (R$)": f"{subtotal:.2f}"
+            })
+
+        if dados_itens:
+            df_itens = pd.DataFrame(dados_itens)
+            st.dataframe(df_itens, use_container_width=True, hide_index=True)
+        else:
+            st.info("Nenhum item vinculado a este pedido.")
+
+    except Exception as e:
+        st.error(f"Erro ao carregar os detalhes: {e}")
+    finally:
+        db.close()
 
 def render_gestao_vendas():
     render_cabecalho("Gestão de Vendas", "Acompanhe o histórico de pedidos e gerencie ações operacionais.")
@@ -120,6 +183,9 @@ def render_gestao_vendas():
             
             with c_row[5]:
                 with st.popover("⋮", use_container_width=True):
+                    if st.button("Ver Detalhes", key=f"det_{p.id_pedido_venda}", use_container_width=True):
+                        modal_detalhes_pedido(id_pedido=p.id_pedido_venda)
+                    
                     if st.button("Ver Histórico", key=f"hist_{p.id_pedido_venda}", use_container_width=True):
                         modal_historico_pedido(pedido_obj=p)
                         
