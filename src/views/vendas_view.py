@@ -71,12 +71,13 @@ def modal_resumo_pedido(id_cliente, carrinho_itens, valor_frete, modalidade_entr
                     id_usuario=1 
                 )
                 
-                criar_entrega_para_pedido(
-                    db=db,
-                    id_pedido=pedido.id_pedido_venda,
-                    data_previsao=data_previsao_entrega, 
-                    valor_frete=valor_frete
-                )
+                if modalidade_entrega == "Entrega Padrão (Logística Interna / Transportadora)":
+                    criar_entrega_para_pedido(
+                        db=db,
+                        id_pedido=pedido.id_pedido_venda,
+                        data_previsao=data_previsao_entrega, 
+                        valor_frete=valor_frete
+                    )
 
                 criar_conta_a_receber(
                     db=db,
