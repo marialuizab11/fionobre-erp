@@ -5,3 +5,6 @@ __pycache__/
 venv/
 env/
 .refact
+.streamlit/secrets.toml
+.streamlit-server*.log
+.auth-server*.log
