@@ -40,6 +40,9 @@ def atualizar_status_logistica(db: Session, id_entrega: int, novo_status: str, i
     
     if novo_status == "Entregue":
         entrega.data_entrega_realizada = datetime.now()
+        if entrega.pedidos:
+            for pedido in entrega.pedidos:
+                pedido.status_venda = "Concluído"
     elif novo_status == "Enviado":
         entrega.data_expedicao = datetime.now()
 
