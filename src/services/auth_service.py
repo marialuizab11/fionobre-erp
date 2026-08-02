@@ -1,0 +1,161 @@
+import json
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Any, Mapping
+
+from sqlalchemy.orm import Session
+
+from src.database.models.usuarios import LogOperacao, Perfil, Permissao, Usuario
+
+
+PERMISSOES_PADRAO = {
+    "estoque.visualizar": "Visualizar saldos e movimentações de estoque",
+    "vendas.gerenciar": "Criar e alterar pedidos de venda",
+    "logistica.gerenciar": "Criar entregas e atualizar seu status",
+    "usuarios.gerenciar": "Alterar perfis e situação dos usuários",
+    "auditoria.visualizar": "Consultar os logs de operação",
+}
+
+PERFIS_PADRAO = {
+    "Administrador": set(PERMISSOES_PADRAO),
+    "Operacional": {
+        "estoque.visualizar",
+        "vendas.gerenciar",
+        "logistica.gerenciar",
+    },
+    "Visualizador": {"estoque.visualizar"},
+}
+
+
+@dataclass(frozen=True)
+class UsuarioAutenticado:
+    id_usuario: int
+    nome: str
+    email: str
+    foto_url: str | None
+    perfil: str
+    permissoes: frozenset[str]
+
+    def pode(self, codigo_permissao: str) -> bool:
+        return codigo_permissao in self.permissoes
+
+
+def garantir_perfis_padrao(db: Session) -> None:
+    permissoes = {}
+    for codigo, descricao in PERMISSOES_PADRAO.items():
+        permissao = db.query(Permissao).filter(Permissao.codigo == codigo).first()
+        if permissao is None:
+            permissao = Permissao(codigo=codigo, descricao=descricao)
+            db.add(permissao)
+            db.flush()
+        permissoes[codigo] = permissao
+
+    for nome, codigos in PERFIS_PADRAO.items():
+        perfil = db.query(Perfil).filter(Perfil.nome == nome).first()
+        if perfil is None:
+            perfil = Perfil(nome=nome, descricao=f"Perfil padrão: {nome}")
+            db.add(perfil)
+            db.flush()
+        perfil.permissoes = [permissoes[codigo] for codigo in sorted(codigos)]
+
+
+def registrar_log(
+    db: Session,
+    usuario: Usuario,
+    modulo: str,
+    acao: str,
+    entidade: str | None = None,
+    id_registro: int | str | None = None,
+    detalhes: Mapping[str, Any] | None = None,
+) -> LogOperacao:
+    log = LogOperacao(
+        id_usuario=usuario.id_usuario,
+        modulo=modulo,
+        acao=acao,
+        entidade=entidade,
+        id_registro=str(id_registro) if id_registro is not None else None,
+        detalhes=json.dumps(detalhes, ensure_ascii=False, default=str) if detalhes else None,
+    )
+    db.add(log)
+    return log
+
+
+def sincronizar_usuario_google(
+    db: Session,
+    claims: Mapping[str, Any],
+    admin_emails: set[str] | None = None,
+) -> Usuario:
+    google_sub = str(claims.get("sub", "")).strip()
+    email = str(claims.get("email", "")).strip().lower()
+    nome = str(claims.get("name", "")).strip() or email
+    foto_url = str(claims.get("picture", "")).strip() or None
+    email_verificado = claims.get("email_verified") in (True, "true", "True", 1, "1")
+
+    if not google_sub or not email:
+        raise ValueError("O Google não retornou os identificadores obrigatórios do usuário.")
+    if not email_verificado:
+        raise ValueError("A conta Google precisa possuir um e-mail verificado.")
+
+    garantir_perfis_padrao(db)
+
+    usuario = db.query(Usuario).filter(Usuario.google_sub == google_sub).first()
+    usuario_por_email = db.query(Usuario).filter(Usuario.email == email).first()
+
+    if usuario is None and usuario_por_email is not None:
+        raise ValueError("Este e-mail já está associado a outra identidade Google.")
+
+    emails_admin = {item.strip().lower() for item in (admin_emails or set()) if item.strip()}
+    nome_perfil_inicial = "Administrador" if email in emails_admin else "Visualizador"
+    perfil_inicial = db.query(Perfil).filter(Perfil.nome == nome_perfil_inicial).one()
+
+    primeiro_login = usuario is None
+    if primeiro_login:
+        usuario = Usuario(
+            google_sub=google_sub,
+            email=email,
+            nome=nome,
+            foto_url=foto_url,
+            perfil=perfil_inicial,
+            ativo=True,
+        )
+        db.add(usuario)
+        db.flush()
+    else:
+        usuario.email = email
+        usuario.nome = nome
+        usuario.foto_url = foto_url
+        if email in emails_admin and usuario.perfil.nome != "Administrador":
+            usuario.perfil = perfil_inicial
+
+    if not usuario.ativo:
+        raise PermissionError("Este usuário está desativado no FioNobre ERP.")
+
+    usuario.ultimo_login_em = datetime.utcnow()
+    registrar_log(
+        db,
+        usuario,
+        modulo="AUTENTICACAO",
+        acao="PRIMEIRO_LOGIN" if primeiro_login else "LOGIN",
+        entidade="Usuario",
+        id_registro=usuario.id_usuario,
+        detalhes={"email": email, "provedor": "Google"},
+    )
+    db.commit()
+    db.refresh(usuario)
+    return usuario
+
+
+def criar_contexto_usuario(usuario: Usuario) -> UsuarioAutenticado:
+    return UsuarioAutenticado(
+        id_usuario=usuario.id_usuario,
+        nome=usuario.nome,
+        email=usuario.email,
+        foto_url=usuario.foto_url,
+        perfil=usuario.perfil.nome,
+        permissoes=frozenset(item.codigo for item in usuario.perfil.permissoes),
+    )
+
+
+def exigir_permissao(usuario: UsuarioAutenticado, codigo_permissao: str) -> None:
+    if not usuario.pode(codigo_permissao):
+        raise PermissionError(f"Permissão necessária: {codigo_permissao}")

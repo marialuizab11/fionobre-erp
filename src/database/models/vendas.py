@@ -8,7 +8,7 @@ class PedidoVenda(Base):
     
     id_pedido_venda = Column(Integer, primary_key=True, autoincrement=True)
     id_cliente = Column(Integer, ForeignKey('cliente.id_cliente'), nullable=False)
-    id_usuario = Column(Integer, nullable=False)  
+    id_usuario = Column(Integer, ForeignKey('usuario.id_usuario'), nullable=False)
     id_entrega = Column(Integer, ForeignKey('entrega.id_entrega'), nullable=True)
     
     data_venda = Column(DateTime, default=datetime.utcnow)
@@ -17,6 +17,7 @@ class PedidoVenda(Base):
     justificativa_cancelamento = Column(String, nullable=True)
     
     cliente = relationship("Cliente", back_populates="pedidos")
+    usuario = relationship("Usuario", back_populates="pedidos_venda")
     entrega = relationship("Entrega", back_populates="pedidos")
     
     itens = relationship("ItemVenda", back_populates="pedido", cascade="all, delete-orphan")
@@ -45,8 +46,7 @@ class ItemVenda(Base):
     
     pedido = relationship("PedidoVenda", back_populates="itens")
     item = relationship("Item", back_populates="itens_vendidos")
-
-
+    
 class PedidoVendaHistorico(Base):
     """
     Registro de auditoria: rastreia quando o pedido foi criado, 

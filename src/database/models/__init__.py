@@ -3,5 +3,18 @@ from src.database.models.cadastros import Cliente, Item
 from src.database.models.vendas import PedidoVenda, ItemVenda
 from src.database.models.logistica import Entrega
 from src.database.models.core import MovimentacaoEstoque
+from src.database.models.usuarios import LogOperacao, Perfil, Permissao, Usuario
 
-__all__ = ["Base", "Cliente", "Item", "PedidoVenda", "ItemVenda", "Entrega", "MovimentacaoEstoque"]
+__all__ = [
+    "Base",
+    "Cliente",
+    "Item",
+    "PedidoVenda",
+    "ItemVenda",
+    "Entrega",
+    "MovimentacaoEstoque",
+    "Usuario",
+    "Perfil",
+    "Permissao",
+    "LogOperacao",
+]

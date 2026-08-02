@@ -1,4 +1,4 @@
 sqlalchemy
 psycopg2-binary
-streamlit
+streamlit[auth]
 python-dotenv
