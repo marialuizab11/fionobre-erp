@@ -88,7 +88,26 @@ DB_PASSWORD=sua_senha
 DB_HOST=localhost
 DB_PORT=5432
 DB_NAME=fio_nobre_db
+ADMIN_EMAILS=seu_email@gmail.com
 ```
+
+## Login com Google
+
+O acesso utiliza OpenID Connect (OIDC) nativo do Streamlit. No Google Cloud,
+crie um cliente OAuth do tipo **Aplicativo da Web** e cadastre esta URI de
+redirecionamento para desenvolvimento local:
+
+```text
+http://localhost:8501/oauth2callback
+```
+
+Depois, copie `.streamlit/secrets.toml.example` para
+`.streamlit/secrets.toml` e preencha `client_id`, `client_secret` e uma
+`cookie_secret` longa e aleatória. O arquivo real de segredos é ignorado pelo
+Git e nunca deve ser versionado.
+
+Contas novas recebem o perfil `Visualizador`. Os e-mails informados em
+`ADMIN_EMAILS`, separados por vírgula, recebem o perfil `Administrador`.
 
 ---
 
@@ -97,7 +116,7 @@ DB_NAME=fio_nobre_db
 Na primeira execução, crie as tabelas do banco executando:
 
 ```bash
-python teste_banco.py
+python init_db.py
 ```
 
 ---

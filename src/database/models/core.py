@@ -8,7 +8,7 @@ class MovimentacaoEstoque(Base):
     
     id_movimentacao = Column(Integer, primary_key=True, autoincrement=True)
     id_item = Column(Integer, ForeignKey('item.id_item'), nullable=False)
-    id_usuario = Column(Integer, nullable=False) # ID vindo do Login Google
+    id_usuario = Column(Integer, ForeignKey('usuario.id_usuario'), nullable=False)
     
     quantidade = Column(Numeric(10, 2), nullable=False)
     tipo_movimento = Column(String(50), nullable=False) # Ex: 'SAIDA_VENDA', 'ENTRADA_COMPRA'
@@ -16,3 +16,4 @@ class MovimentacaoEstoque(Base):
     
     # Relacionamento com o Item do cadastro
     item = relationship("Item", back_populates="movimentacoes")
+    usuario = relationship("Usuario", back_populates="movimentacoes_estoque")

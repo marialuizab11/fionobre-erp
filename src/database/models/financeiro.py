@@ -3,7 +3,6 @@ from sqlalchemy import Column, Integer, String, Numeric, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from src.database.models.base import Base
 
-
 class LancamentoFinanceiro(Base):
     __tablename__ = 'lancamento_financeiro'
 
@@ -16,9 +15,9 @@ class LancamentoFinanceiro(Base):
     data_vencimento = Column(DateTime, nullable=False)
     data_pagamento = Column(DateTime, nullable=True)
 
-    tipo_lancamento = Column(String(50), nullable=False)  # CONTA_A_RECEBER, CONTA_A_PAGAR
-    origem_lancamento = Column(String(50), nullable=False)  # venda, compra, ajuste
-    status_pagamento = Column(String(50), default='Pendente')  # Pendente, Pago, Cancelado
+    tipo_lancamento = Column(String(50), nullable=False) 
+    origem_lancamento = Column(String(50), nullable=False)  
+    status_pagamento = Column(String(50), default='Pendente') 
 
     pedido_venda = relationship("PedidoVenda", back_populates="lancamentos")
     pedido_compra = relationship("PedidoCompra", back_populates="lancamentos")

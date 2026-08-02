@@ -6,16 +6,25 @@ from src.database.models.producao import CentroProducao, OrdemProducao, ConsumoP
 from src.database.models.logistica import Entrega
 from src.database.models.core import MovimentacaoEstoque
 from src.database.models.financeiro import LancamentoFinanceiro
-from src.database.models.log_operacao import LogOperacao
+from src.database.models.usuarios import LogOperacao, Perfil, Permissao, Usuario
 
 __all__ = [
     "Base",
-    "Cliente", "Item",
-    "PedidoVenda", "ItemVenda",
-    "Fornecedor", "PedidoCompra", "ItemCompra",
-    "CentroProducao", "OrdemProducao", "ConsumoProducao",
+    "Cliente",
+    "Item",
+    "PedidoVenda",
+    "ItemVenda",
+    "Fornecedor",
+    "PedidoCompra",
+    "ItemCompra",
+    "CentroProducao",
+    "OrdemProducao",
+    "ConsumoProducao",
     "Entrega",
     "MovimentacaoEstoque",
     "LancamentoFinanceiro",
+    "Usuario",
+    "Perfil",
+    "Permissao",
     "LogOperacao",
 ]
