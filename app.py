@@ -3,6 +3,7 @@ import os
 import streamlit as st
 
 from src.views.estoque_view import render_estoque
+from src.views.gestao_vendas_view import render_gestao_vendas
 from src.views.logistica_view import render_logistica
 from src.views.vendas_view import render_vendas
 
@@ -27,18 +28,20 @@ st.sidebar.markdown("### Menu Operacional")
 
 pagina = st.sidebar.radio(
     "Navegar para:",
-    ["📦 Controle de Estoque", "🛒 Pedidos de Venda", "🚚 Gestão Logística"]
+    ["Controle de Estoque", "Pedidos de Venda", "Gestão Logística", "Gestão de Vendas"]
 )
 
 st.sidebar.markdown("---")
-st.sidebar.info("Sistema integrado de apoio à decisão (2026.1).")
 
 # Roteamento de Páginas
-if pagina == "📦 Controle de Estoque":
+if pagina == "Controle de Estoque":
     render_estoque()
 
-elif pagina == "🚚 Gestão Logística":
+elif pagina == "Gestão Logística":
     render_logistica()
 
-elif pagina == "🛒 Pedidos de Venda":
+elif pagina == "Pedidos de Venda":
     render_vendas()
+
+elif pagina == "Gestão de Vendas":
+    render_gestao_vendas()
