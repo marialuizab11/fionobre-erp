@@ -37,4 +37,7 @@ class Item(Base):
     
     # Relacionamentos
     itens_vendidos = relationship("ItemVenda", back_populates="item")
+    itens_comprados = relationship("ItemCompra", back_populates="item")
     movimentacoes = relationship("MovimentacaoEstoque", back_populates="item")
+    ordens_producao = relationship("OrdemProducao", back_populates="produto")
+    consumos_producao = relationship("ConsumoProducao", back_populates="insumo")
