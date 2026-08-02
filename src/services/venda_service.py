@@ -28,7 +28,7 @@ def criar_pedido_venda(db: Session, id_cliente: int, itens_comprados: list, id_u
         preco_un = linha["valor_unitario"]
         
         # Dispara a baixa e validação de estoque
-        baixar_estoque(db=db, id_item=id_item, quantidade_venda=qtd, id_usuario=id_usuario)
+        baixar_estoque(db=db, id_item=id_item, quantidade=qtd, id_usuario=id_usuario)
         
         subtotal = qtd * preco_un
         valor_total_acumulado += subtotal
