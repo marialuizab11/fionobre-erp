@@ -5,3 +5,6 @@ backgroundColor = "#F4F9F5"      # Fundo geral com tom pastel esverdeado muito s
 secondaryBackgroundColor = "#E3EDF7" # Fundo de blocos/sidebar em tom pastel azulado
 textColor = "#1F2937"            # Texto escuro para legibilidade perfeita
 font = "sans serif"
+
+[server]
+runOnSave = true
