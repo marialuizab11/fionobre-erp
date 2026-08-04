@@ -29,7 +29,8 @@ def obter_ou_criar_estoque_local(db: Session, id_item: int, id_localizacao: int)
 def baixar_estoque(db: Session, id_item: int, quantidade: float, id_usuario: int = 1,
                    tipo_movimento: str = "SAIDA_VENDA",
                    consumir_material_reservado: bool = False,
-                   id_localizacao: int = 1):
+                   id_localizacao: int = 1,
+                   confirmar_transacao: bool = True):
     """Deduz o saldo global e local do item e registra a movimentacao de saida."""
     item = db.query(Item).filter(Item.id_item == id_item).with_for_update().first()
     if not item:
@@ -72,13 +73,17 @@ def baixar_estoque(db: Session, id_item: int, quantidade: float, id_usuario: int
         tipo_movimento=tipo_movimento,
         id_local_origem=id_localizacao
     ))
-    db.commit()
+    if confirmar_transacao:
+        db.commit()
+    else:
+        db.flush()
     return item
 
 
 def entrada_estoque(db: Session, id_item: int, quantidade: float, id_usuario: int = 1,
                     tipo_movimento: str = "ENTRADA_COMPRA", custo_unitario: float = None,
-                    id_localizacao: int = 1):
+                    id_localizacao: int = 1,
+                    confirmar_transacao: bool = True):
     """Adiciona saldo global e local, atualiza o custo medio e registra a entrada."""
     item = db.query(Item).filter(Item.id_item == id_item).with_for_update().first()
     if not item:
@@ -112,12 +117,16 @@ def entrada_estoque(db: Session, id_item: int, quantidade: float, id_usuario: in
         tipo_movimento=tipo_movimento,
         id_local_destino=id_localizacao
     ))
-    db.commit()
+    if confirmar_transacao:
+        db.commit()
+    else:
+        db.flush()
     return item
 
 
 def estornar_estoque(db: Session, id_item: int, quantidade: float, id_usuario: int = 1,
-                     tipo_movimento: str = "ENTRADA_CANCELAMENTO", id_localizacao: int = 1):
+                     tipo_movimento: str = "ENTRADA_CANCELAMENTO", id_localizacao: int = 1,
+                     confirmar_transacao: bool = True):
     """Estorna a operacao original e registra o tipo de movimento informado na localização."""
     if tipo_movimento.startswith("SAIDA_"):
         return baixar_estoque(
@@ -126,7 +135,8 @@ def estornar_estoque(db: Session, id_item: int, quantidade: float, id_usuario: i
             quantidade=quantidade,
             id_usuario=id_usuario,
             tipo_movimento=tipo_movimento,
-            id_localizacao=id_localizacao
+            id_localizacao=id_localizacao,
+            confirmar_transacao=confirmar_transacao,
         )
     return entrada_estoque(
         db=db,
@@ -134,7 +144,8 @@ def estornar_estoque(db: Session, id_item: int, quantidade: float, id_usuario: i
         quantidade=quantidade,
         id_usuario=id_usuario,
         tipo_movimento=tipo_movimento,
-        id_localizacao=id_localizacao
+        id_localizacao=id_localizacao,
+        confirmar_transacao=confirmar_transacao,
     )
 
 
@@ -171,11 +182,29 @@ def ajustar_estoque_manual(db: Session, id_item: int, id_localizacao: int, quant
         raise ValueError("A quantidade de ajuste não pode ser zero.")
         
     if quantidade_ajuste > 0:
-        entrada_estoque(db, id_item, quantidade_ajuste, id_usuario, "AJUSTE_ENTRADA", None, id_localizacao)
+        entrada_estoque(
+            db,
+            id_item,
+            quantidade_ajuste,
+            id_usuario,
+            "AJUSTE_ENTRADA",
+            None,
+            id_localizacao,
+            confirmar_transacao=False,
+        )
         mov = db.query(MovimentacaoEstoque).order_by(MovimentacaoEstoque.id_movimentacao.desc()).first()
         if mov: mov.observacao = observacao
     else:
-        baixar_estoque(db, id_item, abs(quantidade_ajuste), id_usuario, "AJUSTE_SAIDA", False, id_localizacao)
+        baixar_estoque(
+            db,
+            id_item,
+            abs(quantidade_ajuste),
+            id_usuario,
+            "AJUSTE_SAIDA",
+            False,
+            id_localizacao,
+            confirmar_transacao=False,
+        )
         mov = db.query(MovimentacaoEstoque).order_by(MovimentacaoEstoque.id_movimentacao.desc()).first()
         if mov: mov.observacao = observacao
     db.commit()
