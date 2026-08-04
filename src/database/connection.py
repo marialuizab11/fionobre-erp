@@ -14,6 +14,8 @@ def init_db():
     Lê todas as tabelas importadas no pacote de models 
     e as cria automaticamente no PostgreSQL local.
     """
+    import src.database.models  # noqa: F401
+
     Base.metadata.create_all(bind=engine)
 
 def get_db():

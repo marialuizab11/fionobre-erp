@@ -5,6 +5,7 @@ import streamlit as st
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+from src.database.connection import init_db
 from src.views.admin_view import render_admin
 from src.views.auth_view import exigir_login_google, render_usuario_sidebar
 from src.views.cadastros_view import render_cadastros
@@ -18,6 +19,11 @@ from src.views.producao_view import render_producao
 from src.views.vendas_view import render_vendas
 
 
+@st.cache_resource
+def preparar_banco():
+    init_db()
+
+
 def main():
     st.set_page_config(
         page_title="FioNobre ERP - Gestao Industrial",
@@ -25,6 +31,7 @@ def main():
         layout="wide",
     )
     aplicar_estilo_global()
+    preparar_banco()
     usuario_atual = exigir_login_google()
 
     st.sidebar.image(
@@ -47,7 +54,7 @@ def main():
         rotas_possiveis["Gestao de Vendas"] = render_gestao_vendas
         rotas_possiveis["Contas a Receber"] = render_contas_receber
     if usuario_atual.pode("logistica.gerenciar"):
-        rotas_possiveis["Gestao Logistica"] = render_logistica
+        rotas_possiveis["Gestao Logistica"] = lambda: render_logistica(usuario_atual)
     if usuario_atual.pode("usuarios.gerenciar") or usuario_atual.pode("auditoria.visualizar"):
         rotas_possiveis["Administracao"] = lambda: render_admin(usuario_atual)
 
