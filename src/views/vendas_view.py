@@ -85,7 +85,8 @@ def modal_resumo_pedido(id_cliente, carrinho_itens, valor_frete, modalidade_entr
                     db=db,
                     id_pedido=pedido.id_pedido_venda,
                     valor_total=valor_total_compra,
-                    data_vencimento=data_vencimento
+                    data_vencimento=data_vencimento,
+                    id_usuario=usuario_atual.id_usuario,
                 )
                 
                 st.session_state.carrinho_itens = []
