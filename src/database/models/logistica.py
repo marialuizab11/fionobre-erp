@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Numeric, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Numeric, DateTime, ForeignKey, desc
 from sqlalchemy.orm import relationship
 from src.database.models.base import Base
 
@@ -21,7 +21,7 @@ class Entrega(Base):
     historico_status = relationship(
         "EntregaStatusHistorico",
         back_populates="entrega",
-        order_by="EntregaStatusHistorico.data_hora.desc()",
+        order_by=lambda: desc(EntregaStatusHistorico.data_hora),
         cascade="all, delete-orphan"
     )
 

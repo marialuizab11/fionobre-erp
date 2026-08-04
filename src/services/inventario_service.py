@@ -7,9 +7,8 @@ from src.database.models.estoque import InventarioFisico, ItemInventario, Estoqu
 from src.services.estoque_service import ajustar_estoque_manual
 
 
-def iniciar_inventario(db: Session, id_localizacao: int, id_usuario: int = 1, observacoes: str = None) -> InventarioFisico:
+def iniciar_inventario(db: Session, id_localizacao: int, id_usuario: int, observacoes: str = None) -> InventarioFisico:
     """Inicia um novo inventário, congelando o saldo atual dos itens daquela localização."""
-    # Verifica se já existe inventário aberto
     aberto = db.query(InventarioFisico).filter(InventarioFisico.status == "ABERTO").first()
     if aberto:
         raise ValueError("Já existe um inventário físico em andamento.")
@@ -22,10 +21,8 @@ def iniciar_inventario(db: Session, id_localizacao: int, id_usuario: int = 1, ob
     db.add(novo_inv)
     db.flush()
 
-    # Pega todos os itens cadastrados para congelar o saldo atual no local
     itens = db.query(Item).all()
     for item in itens:
-        # Busca o saldo específico no local ou assume 0
         saldo_atual = Decimal("0.00")
         est_loc = db.query(EstoqueLocalizacao).filter(
             EstoqueLocalizacao.id_item == item.id_item,
@@ -40,7 +37,7 @@ def iniciar_inventario(db: Session, id_localizacao: int, id_usuario: int = 1, ob
             id_item=item.id_item,
             id_localizacao=id_localizacao,
             quantidade_sistema=saldo_atual,
-            quantidade_contada=saldo_atual  # Padrão inicial igual ao sistema
+            quantidade_contada=saldo_atual
         )
         db.add(item_inv)
 
@@ -58,7 +55,7 @@ def processar_contagem(db: Session, dados_contagem: list):
     db.commit()
 
 
-def finalizar_inventario(db: Session, id_inventario: int, id_usuario: int = 1):
+def finalizar_inventario(db: Session, id_inventario: int, id_usuario: int):
     """Calcula divergências, aplica ajustes manuais e conclui o inventário."""
     inventario = db.get(InventarioFisico, id_inventario)
     if not inventario or inventario.status != "ABERTO":
@@ -70,7 +67,6 @@ def finalizar_inventario(db: Session, id_inventario: int, id_usuario: int = 1):
         
         linha.diferenca = diferenca
 
-        # Se houver diferença, utiliza a função existente de ajuste manual
         if diferenca != 0:
             ajustar_estoque_manual(
                 db=db,

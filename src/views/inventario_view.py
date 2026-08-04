@@ -6,7 +6,7 @@ from src.database.models.estoque import LocalizacaoEstoque, InventarioFisico
 from src.services.inventario_service import iniciar_inventario, processar_contagem, finalizar_inventario
 from src.views.components.ui_components import render_cabecalho
 
-def render_inventario(usuario_atual=1):
+def render_inventario(usuario_atual):
     render_cabecalho("Inventario Fisico", "Realize contagens fisicas e ajuste divergencias de estoque.")
 
     if "sucesso_inv_msg" in st.session_state:
@@ -31,7 +31,7 @@ def render_inventario(usuario_atual=1):
 
                 if st.button("Iniciar Novo Inventario", type="primary"):
                     try:
-                        iniciar_inventario(db, local_inv_inic.id_localizacao, usuario_atual, obs_inv)
+                        iniciar_inventario(db, local_inv_inic.id_localizacao, usuario_atual.id_usuario, obs_inv)
                         st.session_state["sucesso_inv_msg"] = "Inventario iniciado com sucesso!"
                         st.rerun()
                     except Exception as e:
@@ -79,7 +79,7 @@ def render_inventario(usuario_atual=1):
                 if btn_finalizar:
                     try:
                         processar_contagem(db, payload_contagem)
-                        finalizar_inventario(db, inventario_aberto.id_inventario, usuario_atual)
+                        finalizar_inventario(db, inventario_aberto.id_inventario, usuario_atual.id_usuario)
 
                         st.session_state["sucesso_inv_msg"] = "Inventario finalizado e saldos ajustados com sucesso!"
                         st.rerun()
