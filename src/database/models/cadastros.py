@@ -11,7 +11,6 @@ class Cliente(Base):
     email = Column(String(100), nullable=True)
     telefone = Column(String(20), nullable=True)
     
-    # Endereço desmembrado conforme as elipses do MER
     cep = Column(String(10), nullable=True)
     rua = Column(String(150), nullable=True)
     numero = Column(String(20), nullable=True)
@@ -19,7 +18,6 @@ class Cliente(Base):
     cidade = Column(String(100), nullable=True)
     uf = Column(String(2), nullable=True)
     
-    # Relacionamento com Vendas (Mapeamento ORM)
     pedidos = relationship("PedidoVenda", back_populates="cliente")
 
 
@@ -28,14 +26,18 @@ class Item(Base):
     
     id_item = Column(Integer, primary_key=True, autoincrement=True)
     descricao = Column(String(255), nullable=False)
-    saldo_estoque = Column(Numeric(10, 2), default=0.00)
+    
+    # Este saldo global pode ser mantido temporariamente ou ser tratado
+    # no futuro como um campo calculado (soma das localizações)
+    saldo_estoque = Column(Numeric(10, 2), default=0.00) 
+    
     estoque_minimo = Column(Numeric(10, 2), default=0.00)
     preco_venda = Column(Numeric(10, 2), default=0.00)
     custo_medio = Column(Numeric(10, 2), default=0.00)
     unidade_medida = Column(String(20), nullable=False)
     tipo_item = Column(String(50), nullable=False)
     
-    # Relacionamentos
+    # Relacionamentos antigos
     itens_vendidos = relationship("ItemVenda", back_populates="item")
     itens_comprados = relationship("ItemCompra", back_populates="item")
     movimentacoes = relationship("MovimentacaoEstoque", back_populates="item")
@@ -50,3 +52,7 @@ class Item(Base):
         foreign_keys="ItemFichaTecnica.id_item_insumo",
     )
     reservas_producao = relationship("ReservaMaterial", back_populates="insumo")
+
+    # NOVOS Relacionamentos de Estoque
+    estoques_locais = relationship("EstoqueLocalizacao", back_populates="item")
+    itens_inventario = relationship("ItemInventario", back_populates="item")

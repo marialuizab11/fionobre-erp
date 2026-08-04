@@ -338,7 +338,7 @@ def registrar_devolucao_venda(
     motivo: str,
     usuario: UsuarioAutenticado,
 ) -> PedidoVenda:
-    """Registra a devolução parcial ou total de itens, devolvendo ao estoque e ajustando o financeiro."""
+    """Registra a devolução parcial ou total de itens, devolvendo ao estoque com custo correto e ajustando o financeiro."""
     exigir_permissao(usuario, "vendas.gerenciar")
     pedido = db.get(PedidoVenda, id_pedido)
     if not pedido:
@@ -364,12 +364,16 @@ def registrar_devolucao_venda(
         if qtd_dev <= 0 or qtd_dev > item_venda.quantidade_vendida:
             raise ValueError(f"Quantidade a devolver inválida para o item #{id_item}.")
 
+        # Obtém o custo unitário do item cadastrado para preservar o custo médio no estoque
+        custo_unitario_item = float(item_venda.item.custo_medio) if item_venda.item and item_venda.item.custo_medio else float(item_venda.valor_unitario)
+
         entrada_estoque(
             db=db,
             id_item=id_item,
             quantidade=float(qtd_dev),
             id_usuario=usuario.id_usuario,
             tipo_movimento="ENTRADA_DEVOLUCAO_VENDA",
+            custo_unitario=custo_unitario_item,
         )
 
         item_venda.quantidade_vendida -= qtd_dev
@@ -377,11 +381,23 @@ def registrar_devolucao_venda(
 
     pedido.valor_total_pedido -= valor_estorno_total
 
-    for lancamento in pedido.lancamentos:
+    # Ajuste financeiro robusto (Pendente vs Pago)
+    for lancamento in list(pedido.lancamentos):
         if lancamento.status_pagamento == "Pendente":
             lancamento.valor -= valor_estorno_total
             if lancamento.valor <= 0:
                 lancamento.status_pagamento = "Cancelado"
+        elif lancamento.status_pagamento == "Pago" and valor_estorno_total > 0:
+            # Se já foi pago, gera um Contas a Pagar representando o reembolso devido ao cliente
+            reembolso = LancamentoFinanceiro(
+                id_pedido_venda=pedido.id_pedido_venda,
+                valor=valor_estorno_total,
+                data_vencimento=datetime.utcnow().date(),
+                tipo_lancamento="CONTA_A_PAGAR",
+                origem_lancamento="DEVOLUCAO",
+                status_pagamento="Pendente",
+            )
+            db.add(reembolso)
 
     db.add(PedidoVendaHistorico(
         id_pedido_venda=pedido.id_pedido_venda,
