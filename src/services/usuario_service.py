@@ -91,3 +91,33 @@ def alterar_status_usuario(
     db.commit()
     db.refresh(usuario)
     return usuario
+
+def cadastrar_usuario(db: Session, usuario_executor: Usuario, email: str, nome_perfil: str):
+    """
+    Pré-cadastra um usuário permitindo que ele faça login posteriormente via Google.
+    """
+    if not usuario_executor.pode("usuarios.gerenciar"):
+        raise PermissionError("Você não tem permissão para cadastrar usuários.")
+
+    perfil = db.query(Perfil).filter(Perfil.nome == nome_perfil).first()
+    if not perfil:
+        raise ValueError(f"Perfil '{nome_perfil}' não encontrado.")
+
+    
+    usuario_existente = db.query(Usuario).filter(Usuario.email == email).first()
+    if usuario_existente:
+        raise ValueError(f"O e-mail {email} já está cadastrado no sistema.")
+
+    
+    novo_usuario = Usuario(
+        email=email,
+        nome="Pendente de Primeiro Acesso", 
+        google_sub=f"PENDENTE_{email}",      
+        id_perfil=perfil.id_perfil,
+        ativo=True
+    )
+
+    db.add(novo_usuario)
+    db.commit()
+    db.refresh(novo_usuario)
+    return novo_usuario

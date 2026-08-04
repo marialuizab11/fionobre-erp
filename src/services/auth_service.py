@@ -14,6 +14,7 @@ PERMISSOES_PADRAO = {
     "compras.gerenciar": "Cadastrar fornecedores e gerenciar pedidos de compra",
     "producao.gerenciar": "Cadastrar centros e gerenciar ordens de produção",
     "vendas.gerenciar": "Criar e alterar pedidos de venda",
+    "financeiro.gerenciar": "Gerenciar lançamentos, relatórios e conciliação financeira",
     "logistica.gerenciar": "Criar entregas e atualizar seu status",
     "usuarios.gerenciar": "Alterar perfis e situação dos usuários",
     "auditoria.visualizar": "Consultar os logs de operação",
@@ -27,6 +28,7 @@ PERFIS_PADRAO = {
         "compras.gerenciar",
         "producao.gerenciar",
         "vendas.gerenciar",
+        "financeiro.gerenciar",
         "logistica.gerenciar",
     },
     "Visualizador": {"estoque.visualizar"},
@@ -105,38 +107,43 @@ def sincronizar_usuario_google(
     garantir_perfis_padrao(db)
 
     usuario = db.query(Usuario).filter(Usuario.google_sub == google_sub).first()
-    usuario_por_email = db.query(Usuario).filter(Usuario.email == email).first()
+    if usuario is None:
+        if admin_emails and email in admin_emails:
+            perfil_admin = db.query(Perfil).filter(Perfil.nome == "Administrador").first()
+            
+            usuario = Usuario(
+                google_sub=google_sub,
+                email=email,
+                nome=nome,
+                foto_url=foto_url,
+                ativo=True,
+                id_perfil=perfil_admin.id_perfil
+            )
+            db.add(usuario)
+            db.flush()
+        else:
+            raise PermissionError(
+                f"O e-mail '{email}' não está autorizado a acessar o sistema. Solicite um convite ao administrador."
+            )
 
-    if usuario is None and usuario_por_email is not None:
-        raise ValueError("Este e-mail já está associado a outra identidade Google.")
-
-    emails_admin = {item.strip().lower() for item in (admin_emails or set()) if item.strip()}
-    nome_perfil_inicial = "Administrador" if email in emails_admin else "Visualizador"
-    perfil_inicial = db.query(Perfil).filter(Perfil.nome == nome_perfil_inicial).one()
-
-    primeiro_login = usuario is None
-    if primeiro_login:
-        usuario = Usuario(
-            google_sub=google_sub,
-            email=email,
-            nome=nome,
-            foto_url=foto_url,
-            perfil=perfil_inicial,
-            ativo=True,
+    if usuario is None:
+        raise PermissionError(
+            f"O e-mail '{email}' não está autorizado a acessar o sistema. Solicite um convite ao administrador."
         )
-        db.add(usuario)
-        db.flush()
-    else:
-        usuario.email = email
-        usuario.nome = nome
-        usuario.foto_url = foto_url
-        if email in emails_admin and usuario.perfil.nome != "Administrador":
-            usuario.perfil = perfil_inicial
-
+    
     if not usuario.ativo:
         raise PermissionError("Este usuário está desativado no FioNobre ERP.")
 
+    primeiro_login = usuario.google_sub.startswith("PENDENTE_") or usuario.google_sub != google_sub
+
+    usuario.google_sub = google_sub
+    usuario.email = email
+    if primeiro_login or usuario.nome == "Pendente de Primeiro Acesso":
+        usuario.nome = nome
+    usuario.foto_url = foto_url
+
     usuario.ultimo_login_em = datetime.utcnow()
+    
     registrar_log(
         db,
         usuario,

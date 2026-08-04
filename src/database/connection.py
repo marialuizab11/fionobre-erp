@@ -14,6 +14,7 @@ def init_db():
     Lê todas as tabelas importadas no pacote de models 
     e as cria automaticamente no PostgreSQL local.
     """
+    # Garante que todos os modelos estejam registrados no metadata antes do create_all.
     import src.database.models  # noqa: F401
 
     Base.metadata.create_all(bind=engine)

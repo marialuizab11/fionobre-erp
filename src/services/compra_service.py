@@ -1,46 +1,11 @@
 from datetime import datetime
 from decimal import Decimal
 from sqlalchemy.orm import Session
-from src.database.models.compras import Fornecedor, ItemCompra, NecessidadeCompra, PedidoCompra
+from src.database.models.compras import ItemCompra, NecessidadeCompra, PedidoCompra
 from src.database.models.usuarios import Usuario
 from src.services.auth_service import registrar_log
 from src.services.estoque_service import entrada_estoque, estornar_estoque
 from src.services.financeiro_service import gerar_conta_pagar, cancelar_lancamentos_pedido_compra
-
-
-def criar_fornecedor(db: Session, razao_social: str, cnpj_cpf: str, id_usuario: int, **dados):
-    razao_social = razao_social.strip()
-    cnpj_cpf = cnpj_cpf.strip()
-    if not razao_social or not cnpj_cpf:
-        raise ValueError("Razão social e CPF/CNPJ são obrigatórios.")
-    if db.query(Fornecedor).filter(Fornecedor.cnpj_cpf == cnpj_cpf).first():
-        raise ValueError("Já existe um fornecedor com este CPF/CNPJ.")
-
-    try:
-        fornecedor = Fornecedor(
-            razao_social=razao_social,
-            cnpj_cpf=cnpj_cpf,
-            email=(dados.get("email") or "").strip() or None,
-            telefone=(dados.get("telefone") or "").strip() or None,
-            cep=(dados.get("cep") or "").strip() or None,
-            rua=(dados.get("rua") or "").strip() or None,
-            numero=(dados.get("numero") or "").strip() or None,
-            bairro=(dados.get("bairro") or "").strip() or None,
-            cidade=(dados.get("cidade") or "").strip() or None,
-            uf=(dados.get("uf") or "").strip().upper() or None,
-        )
-        db.add(fornecedor)
-        db.flush()
-        _registrar_log(
-            db, "CRIAR_FORNECEDOR", fornecedor.id_fornecedor,
-            f"Fornecedor '{fornecedor.razao_social}' cadastrado.", id_usuario,
-        )
-        db.commit()
-        db.refresh(fornecedor)
-        return fornecedor
-    except Exception:
-        db.rollback()
-        raise
 
 
 def _registrar_log(db: Session, tipo_operacao: str, id_referencia: int, descricao: str, id_usuario: int):
@@ -305,6 +270,7 @@ def receber_compra(
             id_pedido_compra=id_pedido_compra,
             valor_total=float(pedido.valor_total_pedido),
             data_vencimento=data_vencimento,
+            id_usuario=id_usuario,
         )
 
         for necessidade in pedido.necessidades:
@@ -395,3 +361,107 @@ def listar_pedidos_compra(db: Session, status: str = None):
         query = query.filter(PedidoCompra.status_compra == status)
 
     return query.all()
+
+def editar_pedido_compra(
+    db: Session,
+    id_pedido_compra: int,
+    id_fornecedor: int,
+    itens: list,
+    id_usuario: int = 1,
+):
+    """
+    Edita um pedido de compra que ainda esteja no status 'Criado'.
+    """
+    pedido = db.query(PedidoCompra).filter(
+        PedidoCompra.id_pedido_compra == id_pedido_compra
+    ).first()
+
+    if not pedido:
+        raise ValueError(f"Pedido de compra #{id_pedido_compra} não encontrado.")
+
+    if pedido.status_compra != "Criado":
+        raise ValueError(f"Apenas pedidos com status 'Criado' podem ser editados. Status atual: {pedido.status_compra}.")
+
+    if not itens:
+        raise ValueError("O pedido de compra precisa ter pelo menos um item.")
+
+    try:
+        pedido.id_fornecedor = id_fornecedor
+
+        # Remove os itens antigos
+        db.query(ItemCompra).filter(ItemCompra.id_pedido_compra == id_pedido_compra).delete()
+
+        # Adiciona a nova lista de itens e recalcula o total
+        valor_total = Decimal("0.00")
+        for linha in itens:
+            qtd = Decimal(str(linha["quantidade"]))
+            custo = Decimal(str(linha["custo_unitario"]))
+            if qtd <= 0:
+                raise ValueError("A quantidade comprada deve ser maior que zero.")
+            if custo < 0:
+                raise ValueError("O custo unitário não pode ser negativo.")
+            
+            subtotal = qtd * custo
+            valor_total += subtotal
+
+            db.add(ItemCompra(
+                id_pedido_compra=pedido.id_pedido_compra,
+                id_item=linha["id_item"],
+                quantidade_comprada=qtd,
+                custo_unitario=custo,
+            ))
+
+        pedido.valor_total_pedido = valor_total
+
+        _registrar_log(
+            db,
+            tipo_operacao="EDITAR_PEDIDO_COMPRA",
+            id_referencia=pedido.id_pedido_compra,
+            descricao=f"Pedido de compra #{pedido.id_pedido_compra} editado.",
+            id_usuario=id_usuario,
+        )
+
+        db.commit()
+        db.refresh(pedido)
+        return pedido
+    except Exception as e:
+        db.rollback()
+        raise RuntimeError(f"Erro ao editar pedido de compra: {e}")
+
+
+def remover_pedido_compra(db: Session, id_pedido_compra: int, id_usuario: int = 1):
+    """
+    Remove fisicamente um pedido de compra que esteja com status 'Criado'.
+    Libera eventuais necessidades de compra do PCP associadas.
+    """
+    pedido = db.query(PedidoCompra).filter(
+        PedidoCompra.id_pedido_compra == id_pedido_compra
+    ).first()
+
+    if not pedido:
+        raise ValueError(f"Pedido de compra #{id_pedido_compra} não encontrado.")
+
+    if pedido.status_compra != "Criado":
+        raise ValueError(f"Apenas pedidos com status 'Criado' podem ser removidos. Para outros status, utilize o cancelamento.")
+
+    try:
+        # Libera necessidades do PCP se existirem
+        for necessidade in pedido.necessidades:
+            necessidade.status_necessidade = "PENDENTE"
+            necessidade.id_pedido_compra = None
+
+        db.query(ItemCompra).filter(ItemCompra.id_pedido_compra == id_pedido_compra).delete()
+        
+        _registrar_log(
+            db,
+            tipo_operacao="REMOVER_PEDIDO_COMPRA",
+            id_referencia=pedido.id_pedido_compra,
+            descricao=f"Pedido de compra #{pedido.id_pedido_compra} removido do sistema.",
+            id_usuario=id_usuario,
+        )
+
+        db.delete(pedido)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise RuntimeError(f"Erro ao remover pedido de compra: {e}")

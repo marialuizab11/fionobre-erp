@@ -7,6 +7,7 @@ from src.services.usuario_service import (
     alterar_status_usuario,
     listar_logs,
     listar_usuarios,
+    cadastrar_usuario, 
 )
 from src.views.components.ui_components import render_cabecalho
 
@@ -14,6 +15,36 @@ from src.views.components.ui_components import render_cabecalho
 def _render_usuarios(usuario_atual) -> None:
     db = SessionLocal()
     try:
+        with st.expander("➕ Convidar / Cadastrar Novo Usuário", expanded=False):
+            st.markdown("Insira o e-mail Google do colaborador e defina o perfil de acesso inicial.")
+            with st.form("form_novo_usuario", clear_on_submit=True):
+                novo_email = st.text_input("E-mail do Usuário (Google)")
+                perfis_disponiveis = db.query(Perfil).order_by(Perfil.nome).all()
+                nomes_perfis_cad = [perfil.nome for perfil in perfis_disponiveis]
+                
+                novo_perfil_nome = st.selectbox("Perfil de Acesso (Role)", nomes_perfis_cad)
+                
+                submitted = st.form_submit_button("Cadastrar Usuário", use_container_width=True)
+                if submitted:
+                    if not novo_email or "@" not in novo_email:
+                        st.error("Informe um e-mail válido.")
+                    else:
+                        try:
+                            cadastrar_usuario(
+                                db=db,
+                                usuario_executor=usuario_atual,
+                                email=novo_email.strip().lower(),
+                                nome_perfil=novo_perfil_nome
+                            )
+                            st.success(f"Usuário {novo_email} cadastrado com sucesso!")
+                            st.rerun()
+                        except Exception as err:
+                            db.rollback()
+                            st.error(f"Erro ao cadastrar usuário: {err}")
+
+        st.divider()
+
+        # Listagem e Gestão dos usuários existentes
         usuarios = listar_usuarios(db, usuario_atual)
         perfis = db.query(Perfil).order_by(Perfil.nome).all()
 
@@ -21,9 +52,9 @@ def _render_usuarios(usuario_atual) -> None:
             [
                 {
                     "ID": usuario.id_usuario,
-                    "Nome": usuario.nome,
+                    "Nome": usuario.nome or "Pendente de Primeiro Acesso",
                     "E-mail": usuario.email,
-                    "Perfil": usuario.perfil.nome,
+                    "Perfil": usuario.perfil.nome if usuario.perfil else "Sem Perfil",
                     "Ativo": usuario.ativo,
                     "Último login": usuario.ultimo_login_em,
                 }
@@ -37,12 +68,14 @@ def _render_usuarios(usuario_atual) -> None:
             st.info("Nenhum usuário cadastrado.")
             return
 
-        opcoes = {f"{item.nome} · {item.email}": item for item in usuarios}
-        rotulo_usuario = st.selectbox("Usuário", list(opcoes))
+        st.markdown("### Gerenciar Usuário Existente")
+        opcoes = {f"{item.nome or 'Sem Nome'} · {item.email}": item for item in usuarios}
+        rotulo_usuario = st.selectbox("Selecione o Usuário", list(opcoes))
         usuario_selecionado = opcoes[rotulo_usuario]
+        
         nomes_perfis = [perfil.nome for perfil in perfis]
-        indice_perfil = nomes_perfis.index(usuario_selecionado.perfil.nome)
-        nome_perfil = st.selectbox("Perfil", nomes_perfis, index=indice_perfil)
+        indice_perfil = nomes_perfis.index(usuario_selecionado.perfil.nome) if usuario_selecionado.perfil and usuario_selecionado.perfil.nome in nomes_perfis else 0
+        nome_perfil = st.selectbox("Novo Perfil", nomes_perfis, index=indice_perfil)
 
         col_perfil, col_status = st.columns(2)
         if col_perfil.button("Salvar perfil", use_container_width=True):
@@ -81,7 +114,7 @@ def _render_auditoria(usuario_atual) -> None:
             [
                 {
                     "Data/hora": log.data_hora,
-                    "Usuário": log.usuario.email,
+                    "Usuário": log.usuario.email if log.usuario else "Sistema",
                     "Módulo": log.modulo,
                     "Ação": log.acao,
                     "Entidade": log.entidade,
@@ -109,6 +142,10 @@ def render_admin(usuario_atual) -> None:
         nomes_abas.append("Usuários")
     if usuario_atual.pode("auditoria.visualizar"):
         nomes_abas.append("Auditoria")
+
+    if not nomes_abas:
+        st.warning("Você não tem permissão para visualizar esta página.")
+        return
 
     abas = st.tabs(nomes_abas)
     for nome, aba in zip(nomes_abas, abas):
