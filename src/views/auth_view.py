@@ -2,7 +2,11 @@ import streamlit as st
 
 from config.settings import ADMIN_EMAILS
 from src.database.connection import SessionLocal
-from src.services.auth_service import criar_contexto_usuario, sincronizar_usuario_google
+from src.services.auth_service import (
+    carregar_contexto_usuario,
+    criar_contexto_usuario,
+    sincronizar_usuario_google,
+)
 
 
 def _auth_google_configurada() -> bool:
@@ -29,22 +33,28 @@ def exigir_login_google():
         st.button("Entrar com Google", on_click=st.login, type="primary")
         st.stop()
 
-    if "usuario_contexto" not in st.session_state:
-        db = SessionLocal()
-        try:
+    db = SessionLocal()
+    try:
+        if "usuario_contexto" not in st.session_state:
             usuario = sincronizar_usuario_google(
                 db,
                 st.user.to_dict(),
                 admin_emails=ADMIN_EMAILS,
             )
             st.session_state["usuario_contexto"] = criar_contexto_usuario(usuario)
-        except Exception as erro:
-            db.rollback()
-            st.error(f"Não foi possível autorizar o usuário: {erro}")
-            st.button("Sair", on_click=st.logout)
-            st.stop()
-        finally:
-            db.close()
+        else:
+            st.session_state["usuario_contexto"] = carregar_contexto_usuario(
+                db,
+                st.session_state["usuario_contexto"].id_usuario,
+            )
+    except Exception as erro:
+        db.rollback()
+        st.session_state.pop("usuario_contexto", None)
+        st.error(f"Não foi possível autorizar o usuário: {erro}")
+        st.button("Sair", on_click=st.logout)
+        st.stop()
+    finally:
+        db.close()
 
     return st.session_state["usuario_contexto"]
 

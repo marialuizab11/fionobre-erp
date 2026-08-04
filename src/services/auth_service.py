@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Mapping
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from src.database.models.usuarios import LogOperacao, Perfil, Permissao, Usuario
@@ -64,7 +65,7 @@ def garantir_perfis_padrao(db: Session) -> None:
             perfil = Perfil(nome=nome, descricao=f"Perfil padrão: {nome}")
             db.add(perfil)
             db.flush()
-        perfil.permissoes = [permissoes[codigo] for codigo in sorted(codigos)]
+            perfil.permissoes = [permissoes[codigo] for codigo in sorted(codigos)]
 
 
 def registrar_log(
@@ -106,9 +107,21 @@ def sincronizar_usuario_google(
 
     garantir_perfis_padrao(db)
 
+    primeiro_login = False
     usuario = db.query(Usuario).filter(Usuario.google_sub == google_sub).first()
     if usuario is None:
-        if admin_emails and email in admin_emails:
+        usuario_pendente = (
+            db.query(Usuario)
+            .filter(
+                func.lower(Usuario.email) == email,
+                Usuario.google_sub.like("PENDENTE_%"),
+            )
+            .first()
+        )
+        if usuario_pendente is not None:
+            usuario = usuario_pendente
+            primeiro_login = True
+        elif admin_emails and email in admin_emails:
             perfil_admin = db.query(Perfil).filter(Perfil.nome == "Administrador").first()
             
             usuario = Usuario(
@@ -121,6 +134,7 @@ def sincronizar_usuario_google(
             )
             db.add(usuario)
             db.flush()
+            primeiro_login = True
         else:
             raise PermissionError(
                 f"O e-mail '{email}' não está autorizado a acessar o sistema. Solicite um convite ao administrador."
@@ -133,8 +147,6 @@ def sincronizar_usuario_google(
     
     if not usuario.ativo:
         raise PermissionError("Este usuário está desativado no FioNobre ERP.")
-
-    primeiro_login = usuario.google_sub.startswith("PENDENTE_") or usuario.google_sub != google_sub
 
     usuario.google_sub = google_sub
     usuario.email = email
@@ -167,6 +179,15 @@ def criar_contexto_usuario(usuario: Usuario) -> UsuarioAutenticado:
         perfil=usuario.perfil.nome,
         permissoes=frozenset(item.codigo for item in usuario.perfil.permissoes),
     )
+
+
+def carregar_contexto_usuario(db: Session, id_usuario: int) -> UsuarioAutenticado:
+    usuario = db.get(Usuario, id_usuario)
+    if usuario is None:
+        raise PermissionError("Usuário não encontrado.")
+    if not usuario.ativo:
+        raise PermissionError("Este usuário está desativado no FioNobre ERP.")
+    return criar_contexto_usuario(usuario)
 
 
 def exigir_permissao(usuario: UsuarioAutenticado, codigo_permissao: str) -> None:
