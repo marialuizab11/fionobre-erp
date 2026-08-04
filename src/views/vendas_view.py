@@ -12,7 +12,9 @@ def resetar_formulario():
     st.session_state.carrinho_itens = []
 
 @st.dialog("Resumo do Pedido")
-def modal_resumo_pedido(id_cliente, carrinho_itens, valor_frete, modalidade_entrega, data_previsao_entrega, condicao_pagamento, data_vencimento):
+def modal_resumo_pedido(id_cliente, carrinho_itens, valor_frete, modalidade_entrega,
+                        data_previsao_entrega, condicao_pagamento, data_vencimento,
+                        usuario_atual):
     st.write("Confira os detalhes do pedido antes de finalizar:")
     
     valor_total_itens = 0
@@ -68,7 +70,7 @@ def modal_resumo_pedido(id_cliente, carrinho_itens, valor_frete, modalidade_entr
                     db=db,
                     id_cliente=id_cliente,
                     itens_comprados=carrinho_payload,
-                    id_usuario=1 
+                    usuario=usuario_atual,
                 )
                 
                 if modalidade_entrega == "Entrega Padrão (Logística Interna / Transportadora)":
@@ -99,7 +101,7 @@ def modal_resumo_pedido(id_cliente, carrinho_itens, valor_frete, modalidade_entr
         if st.button("Cancelar", use_container_width=True):
             st.rerun()
 
-def render_vendas():
+def render_vendas(usuario_atual):
     if "carrinho_itens" not in st.session_state:
         st.session_state.carrinho_itens = []
 
@@ -113,7 +115,12 @@ def render_vendas():
     db = SessionLocal()
     try:
         clientes = db.query(Cliente).all()
-        itens = db.query(Item).all()
+        itens = (
+            db.query(Item)
+            .filter(Item.tipo_item == "PRODUTO_ACABADO")
+            .order_by(Item.descricao)
+            .all()
+        )
         
         if not clientes or not itens:
             st.warning("Aviso: É necessário ter clientes e itens cadastrados no banco. Verifique o painel de estoque.")
@@ -135,7 +142,7 @@ def render_vendas():
 
         with st.form("form_adicionar_item", clear_on_submit=False):
             item_map = {f"{i.descricao} (Disponível: {i.saldo_estoque} {i.unidade_medida})": i for i in itens}
-            item_selecionado_str = st.selectbox("Selecionar Produto / Matéria-Prima", list(item_map.keys()))
+            item_selecionado_str = st.selectbox("Selecionar produto acabado", list(item_map.keys()))
             
             item_obj = item_map.get(item_selecionado_str)
             
@@ -250,7 +257,8 @@ def render_vendas():
                         modalidade_entrega,
                         data_previsao_entrega,
                         condicao_pagamento, 
-                        data_vencimento
+                        data_vencimento,
+                        usuario_atual,
                     )
         else:
             st.info("Informação: O carrinho está vazio. Adicione pelo menos um produto para conseguir finalizar a venda.")
