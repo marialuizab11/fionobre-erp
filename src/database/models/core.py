@@ -10,10 +10,17 @@ class MovimentacaoEstoque(Base):
     id_item = Column(Integer, ForeignKey('item.id_item'), nullable=False)
     id_usuario = Column(Integer, ForeignKey('usuario.id_usuario'), nullable=False)
     
-    quantidade = Column(Numeric(10, 2), nullable=False)
-    tipo_movimento = Column(String(50), nullable=False) # Ex: 'SAIDA_VENDA', 'ENTRADA_COMPRA'
-    data_movimento = Column(DateTime, default=datetime.utcnow)
+    # Novos campos para controle de localização e transferências
+    id_local_origem = Column(Integer, ForeignKey('localizacao_estoque.id_localizacao'), nullable=True)
+    id_local_destino = Column(Integer, ForeignKey('localizacao_estoque.id_localizacao'), nullable=True)
     
-    # Relacionamento com o Item do cadastro
+    quantidade = Column(Numeric(10, 2), nullable=False)
+    tipo_movimento = Column(String(50), nullable=False) # Ex: 'SAIDA_VENDA', 'ENTRADA_COMPRA', 'TRANSFERENCIA', 'AJUSTE'
+    data_movimento = Column(DateTime, default=datetime.utcnow)
+    observacao = Column(String(255), nullable=True) # Motivo do ajuste manual ou ref do inventário
+    
+    # Relacionamentos
     item = relationship("Item", back_populates="movimentacoes")
     usuario = relationship("Usuario", back_populates="movimentacoes_estoque")
+    local_origem = relationship("LocalizacaoEstoque", foreign_keys=[id_local_origem])
+    local_destino = relationship("LocalizacaoEstoque", foreign_keys=[id_local_destino])

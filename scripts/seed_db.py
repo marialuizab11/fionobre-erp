@@ -8,6 +8,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from src.database.models.base import Base
+
+import src.database.models.estoque
+
 from src.database.models import (
     Cliente, Item, Fornecedor, PedidoCompra, ItemCompra, NecessidadeCompra,
     MovimentacaoEstoque, LancamentoFinanceiro, Entrega, EntregaStatusHistorico,
@@ -81,9 +84,19 @@ def seed_database(database_url):
         session.add_all(usuarios_op)
         session.flush()
         todos_usuarios = [admin_user] + usuarios_op
+        
+        # ---------------------------------------------------------
+        # LOCALIZAÇÕES DE ESTOQUE
+        # ---------------------------------------------------------
+        print("Populando localizacoes de estoque...")
+        from src.database.models.estoque import LocalizacaoEstoque, EstoqueLocalizacao
+        loc_principal = LocalizacaoEstoque(nome="Armazém Principal", descricao="Galpão central", ativo='S')
+        loc_secundaria = LocalizacaoEstoque(nome="Prateleira de Avarias", descricao="Itens com defeito", ativo='S')
+        session.add_all([loc_principal, loc_secundaria])
+        session.flush()
 
         # ---------------------------------------------------------
-        # ITENS (MATÉRIA-PRIMA, INSUMO, PRODUTO ACABADO)
+        # ITENS E ESTOQUE
         # ---------------------------------------------------------
         print("Populando itens de estoque...")
         materias_primas = [
@@ -100,7 +113,18 @@ def seed_database(database_url):
             Item(descricao='Calca Sarja 40', tipo_item='PRODUTO_ACABADO', unidade_medida='UN', saldo_estoque=80, estoque_minimo=20, preco_venda=120.00, custo_medio=50.00)
         ]
         
-        session.add_all(materias_primas + produtos_acabados)
+        todos_itens = materias_primas + produtos_acabados
+        session.add_all(todos_itens)
+        session.flush()
+        
+        # Sincroniza o saldo_estoque com a nova tabela de EstoqueLocalizacao
+        for item in todos_itens:
+            el = EstoqueLocalizacao(
+                id_item=item.id_item,
+                id_localizacao=loc_principal.id_localizacao,
+                quantidade=item.saldo_estoque
+            )
+            session.add(el)
         session.flush()
 
         # ---------------------------------------------------------
@@ -237,7 +261,6 @@ def seed_database(database_url):
 
         for pc in pedidos_compra:
             total = 0
-            # Sorteia de 1 a 4 matérias-primas únicas para este pedido
             qtd_itens = random.randint(1, min(4, len(materias_primas)))
             itens_escolhidos = random.sample(materias_primas, k=qtd_itens)
             
@@ -346,13 +369,14 @@ def seed_database(database_url):
         # MOVIMENTAÇÃO DE ESTOQUE E LOGS
         # ---------------------------------------------------------
         print("Populando logs e movimentacoes de estoque...")
-        for item in materias_primas + produtos_acabados:
+        for item in todos_itens:
             mov = MovimentacaoEstoque(
                 id_item=item.id_item,
                 id_usuario=admin_user.id_usuario,
                 quantidade=item.saldo_estoque,
                 tipo_movimento='SALDO_INICIAL',
-                data_movimento=datetime.utcnow() - timedelta(days=100)
+                data_movimento=datetime.utcnow() - timedelta(days=100),
+                id_local_destino=loc_principal.id_localizacao
             )
             session.add(mov)
 

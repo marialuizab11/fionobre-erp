@@ -12,6 +12,7 @@ from src.views.cadastros_view import render_cadastros
 from src.views.components.ui_components import aplicar_estilo_global
 from src.views.compras_view import render_compras
 from src.views.estoque_view import render_estoque
+from src.views.inventario_view import render_inventario
 from src.views.financeiro_view import render_financeiro
 from src.views.gestao_vendas_view import render_gestao_vendas
 from src.views.logistica_view import render_logistica
@@ -34,24 +35,22 @@ def main():
     preparar_banco()
     usuario_atual = exigir_login_google()
 
-    st.sidebar.image(
-        "https://via.placeholder.com/150x50/E3EDF7/2E7D32?text=FioNobre+ERP",
-        use_container_width=True,
-    )
+    st.sidebar.markdown("## 🧵 FioNobre ERP")
     st.sidebar.markdown("### Menu Operacional")
 
     rotas_possiveis = {}
     if usuario_atual.pode("cadastros.gerenciar"):
         rotas_possiveis["Cadastros"] = lambda: render_cadastros(usuario_atual)
     if usuario_atual.pode("estoque.visualizar"):
-        rotas_possiveis["Controle de Estoque"] = render_estoque
+        rotas_possiveis["Controle de Estoque"] = lambda: render_estoque(usuario_atual)
+        rotas_possiveis["Inventário Físico"] = lambda: render_inventario(usuario_atual)
     if usuario_atual.pode("compras.gerenciar"):
         rotas_possiveis["Compras"] = lambda: render_compras(usuario_atual)
     if usuario_atual.pode("producao.gerenciar"):
         rotas_possiveis["PCP e Producao"] = lambda: render_producao(usuario_atual)
     if usuario_atual.pode("vendas.gerenciar"):
         rotas_possiveis["Pedidos de Venda"] = lambda: render_vendas(usuario_atual)
-        rotas_possiveis["Gestao de Vendas"] = render_gestao_vendas
+        rotas_possiveis["Gestao de Vendas"] = lambda: render_gestao_vendas(usuario_atual)
     if usuario_atual.pode("financeiro.gerenciar"):
         rotas_possiveis["Financeiro"] = lambda: render_financeiro(usuario_atual)
     if usuario_atual.pode("logistica.gerenciar"):
@@ -65,8 +64,8 @@ def main():
 
     pagina_selecionada = st.sidebar.radio("Navegar para:", list(rotas_possiveis))
     st.sidebar.markdown("---")
-    st.sidebar.info("Sistema integrado de apoio a decisao (2026.1).")
     render_usuario_sidebar(usuario_atual)
+    
     rotas_possiveis[pagina_selecionada]()
 
 
