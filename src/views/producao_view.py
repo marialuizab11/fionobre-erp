@@ -227,16 +227,22 @@ def _fichas_tecnicas(db, usuario_atual):
         st.info("Cadastre um produto acabado e ao menos uma matéria-prima ou insumo.")
         return
 
+    if "form_ficha_reset_counter" not in st.session_state:
+        st.session_state["form_ficha_reset_counter"] = 0
+
     produto_map = {item.id_item: item for item in produtos}
     insumo_map = {item.id_item: item for item in insumos}
+    
     produto_id = st.selectbox(
         "Produto da ficha técnica",
         list(produto_map),
         format_func=lambda valor: produto_map[valor].descricao,
-        key="ficha_produto",
+        key=f"ficha_produto_{st.session_state['form_ficha_reset_counter']}",
     )
+    
     ficha_atual = obter_ficha_tecnica(db, produto_id)
     ids_atuais = [item.id_item_insumo for item in ficha_atual.componentes] if ficha_atual else []
+    
     selecionados = st.multiselect(
         "Componentes",
         list(insumo_map),
@@ -244,14 +250,15 @@ def _fichas_tecnicas(db, usuario_atual):
         format_func=lambda valor: (
             f"{insumo_map[valor].descricao} ({insumo_map[valor].unidade_medida})"
         ),
-        key=f"ficha_componentes_{produto_id}",
+        key=f"ficha_componentes_{produto_id}_{st.session_state['form_ficha_reset_counter']}",
     )
+    
     atuais = {
         item.id_item_insumo: float(item.quantidade_por_unidade)
         for item in ficha_atual.componentes
     } if ficha_atual else {}
 
-    with st.form(f"form_ficha_{produto_id}"):
+    with st.form(f"form_ficha_{produto_id}_{st.session_state['form_ficha_reset_counter']}"):
         descricao = st.text_input(
             "Descrição da ficha",
             value=ficha_atual.descricao or "" if ficha_atual else "",
@@ -264,19 +271,21 @@ def _fichas_tecnicas(db, usuario_atual):
                 min_value=0.0001,
                 value=atuais.get(insumo_id, 1.0),
                 format="%.4f",
-                key=f"ficha_qtd_{produto_id}_{insumo_id}",
+                key=f"ficha_qtd_{produto_id}_{insumo_id}_{st.session_state['form_ficha_reset_counter']}",
             )
             componentes.append({
                 "id_item_insumo": insumo_id,
                 "quantidade_por_unidade": quantidade,
             })
         salvar = st.form_submit_button("Salvar ficha técnica", type="primary")
+        
     if salvar:
         try:
             salvar_ficha_tecnica(
                 db, produto_id, componentes, usuario_atual.id_usuario, descricao
             )
             st.success("Ficha técnica salva.")
+            st.session_state["form_ficha_reset_counter"] += 1
             st.rerun()
         except Exception as erro:
             st.error(str(erro))
@@ -292,7 +301,6 @@ def _fichas_tecnicas(db, usuario_atual):
             use_container_width=True,
             hide_index=True,
         )
-
 
 def _nova_ordem(db, usuario_atual):
     centros = db.query(CentroProducao).filter(CentroProducao.ativo == "S").all()

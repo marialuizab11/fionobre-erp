@@ -40,8 +40,8 @@ class FichaTecnica(Base):
     id_item_produto = Column(Integer, ForeignKey("item.id_item"), nullable=False, unique=True)
     descricao = Column(String(255), nullable=True)
     ativo = Column(String(1), nullable=False, default="S")
-    data_criacao = Column(DateTime, nullable=False, default=datetime.utcnow)
-    data_atualizacao = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    data_criacao = Column(DateTime, nullable=False, default=datetime.now)
+    data_atualizacao = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.utcnow)
 
     produto = relationship("Item", back_populates="ficha_tecnica", foreign_keys=[id_item_produto])
     componentes = relationship(

@@ -54,7 +54,7 @@ def main():
     if usuario_atual.pode("financeiro.gerenciar"):
         rotas_possiveis["Financeiro"] = lambda: render_financeiro(usuario_atual)
     if usuario_atual.pode("logistica.gerenciar"):
-        rotas_possiveis["Gestao Logistica"] = render_logistica
+        rotas_possiveis["Gestao Logistica"] = lambda: render_logistica(usuario_atual)
     if usuario_atual.pode("usuarios.gerenciar") or usuario_atual.pode("auditoria.visualizar"):
         rotas_possiveis["Administracao"] = lambda: render_admin(usuario_atual)
 

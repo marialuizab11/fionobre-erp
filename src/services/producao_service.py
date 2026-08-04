@@ -30,66 +30,32 @@ def obter_ficha_tecnica(db: Session, id_item_produto: int):
     ).first()
 
 
-def salvar_ficha_tecnica(
-    db: Session,
-    id_item_produto: int,
-    componentes: list,
-    id_usuario: int,
-    descricao: str = "",
-):
-    if not componentes:
-        raise ValueError("A ficha técnica precisa ter pelo menos um insumo.")
-
-    produto = db.get(Item, id_item_produto)
-    if produto is None or produto.tipo_item != "PRODUTO_ACABADO":
-        raise ValueError("A ficha técnica deve pertencer a um produto acabado válido.")
-
-    ids_insumos = [int(item["id_item_insumo"]) for item in componentes]
-    if len(ids_insumos) != len(set(ids_insumos)):
-        raise ValueError("O mesmo insumo não pode aparecer mais de uma vez na ficha.")
-
-    try:
-        novos_componentes = []
-        for componente in componentes:
-            insumo = db.get(Item, int(componente["id_item_insumo"]))
-            quantidade = Decimal(str(componente["quantidade_por_unidade"]))
-            if insumo is None or insumo.tipo_item == "PRODUTO_ACABADO":
-                raise ValueError("Todos os componentes devem ser matérias-primas ou insumos válidos.")
-            if quantidade <= 0:
-                raise ValueError("A quantidade por unidade deve ser maior que zero.")
-            novos_componentes.append(
-                ItemFichaTecnica(
-                    id_item_insumo=insumo.id_item,
-                    quantidade_por_unidade=quantidade,
-                )
-            )
-
-        ficha = db.query(FichaTecnica).filter(
-            FichaTecnica.id_item_produto == id_item_produto
-        ).first()
-        acao = "ATUALIZAR_FICHA_TECNICA" if ficha else "CRIAR_FICHA_TECNICA"
-        if ficha is None:
-            ficha = FichaTecnica(id_item_produto=id_item_produto)
-            db.add(ficha)
-        ficha.descricao = descricao.strip() or None
-        ficha.ativo = "S"
-        ficha.componentes = novos_componentes
-        db.flush()
-
-        _registrar_log(
-            db,
-            acao,
-            ficha.id_ficha_tecnica,
-            f"Ficha técnica de '{produto.descricao}' salva com {len(componentes)} componente(s).",
-            id_usuario,
+def salvar_ficha_tecnica(db: Session, produto_id: int, componentes: list, id_usuario: int, descricao: str):
+    ficha = db.query(FichaTecnica).filter(FichaTecnica.id_item_produto == produto_id).first()
+    
+    if not ficha:
+        ficha = FichaTecnica(
+            id_item_produto=produto_id, 
+            descricao=descricao
         )
-        db.commit()
-        db.refresh(ficha)
-        return ficha
-    except Exception:
-        db.rollback()
-        raise
+        db.add(ficha)
+        db.flush()
+    else:
+        ficha.descricao = descricao
 
+        db.query(ItemFichaTecnica).filter(ItemFichaTecnica.id_ficha_tecnica == ficha.id_ficha_tecnica).delete()
+        
+    for comp in componentes:
+        novo_item = ItemFichaTecnica(
+            id_ficha_tecnica=ficha.id_ficha_tecnica,
+            id_item_insumo=comp["id_item_insumo"],
+            quantidade_por_unidade=comp["quantidade_por_unidade"]
+        )
+        db.add(novo_item)
+    
+    db.commit()
+    db.refresh(ficha)
+    return ficha
 
 def calcular_necessidade_materiais(db: Session, id_item_produto: int, quantidade_planejada):
     quantidade = Decimal(str(quantidade_planejada))
