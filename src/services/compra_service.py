@@ -270,6 +270,7 @@ def receber_compra(
             id_pedido_compra=id_pedido_compra,
             valor_total=float(pedido.valor_total_pedido),
             data_vencimento=data_vencimento,
+            id_usuario=id_usuario,
         )
 
         for necessidade in pedido.necessidades:
