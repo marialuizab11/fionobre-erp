@@ -157,7 +157,9 @@ Utilize apenas o arquivo **`.env.example`** para servir como modelo de configura
 # 👥 Desenvolvedores
 
 Projeto desenvolvido por:
- _pendente_
+* [@Maria Luiza Bezerra dos Santos](https://github.com/marialuizab11)
+* [@Matheus Cavalcante](https://github.com/Matheuuscavufape)
+* [@João Vitor](https://github.com/jvdss3)
 
 ---
 
