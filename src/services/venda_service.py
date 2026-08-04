@@ -104,9 +104,9 @@ def cancelar_venda(
     db: Session,
     id_pedido: int,
     justificativa: str,
-    id_usuario: int = 1,
-    nome_usuario: str = None
+    usuario: UsuarioAutenticado
 ):
+    exigir_permissao(usuario, "vendas.gerenciar")
     pedido = db.query(PedidoVenda).filter(PedidoVenda.id_pedido_venda == id_pedido).first()
     if not pedido:
         raise ValueError(f"Pedido com ID {id_pedido} não encontrado.")
@@ -126,8 +126,8 @@ def cancelar_venda(
     pedido.justificativa_cancelamento = justificativa
     db.add(PedidoVendaHistorico(
         id_pedido_venda=id_pedido,
-        id_usuario=id_usuario,
-        nome_usuario=nome_usuario,
+        id_usuario=usuario.id_usuario,
+        nome_usuario=usuario.nome,
         status_anterior=status_antigo,
         status_novo="Cancelado",
         justificativa=justificativa,
@@ -135,7 +135,7 @@ def cancelar_venda(
 
     itens_vendidos = db.query(ItemVenda).filter(ItemVenda.id_pedido_venda == id_pedido).all()
     for item in itens_vendidos:
-        estornar_estoque(db, item.id_item, item.quantidade_vendida, id_usuario)
+        estornar_estoque(db, item.id_item, item.quantidade_vendida, usuario.id_usuario)
 
     if entrega:
         entrega.status_logistica = "Falha"
@@ -154,7 +154,6 @@ def cancelar_venda(
     except Exception as erro:
         db.rollback()
         raise RuntimeError(f"Erro ao processar o cancelamento da venda: {erro}") from erro
-
 
 def listar_pedidos(
     db: Session,

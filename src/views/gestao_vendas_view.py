@@ -175,7 +175,7 @@ def modal_historico_pedido(pedido_obj):
 
 
 @st.dialog("Cancelar Pedido de Venda")
-def modal_cancelar_pedido(id_pedido):
+def modal_cancelar_pedido(id_pedido, usuario_atual):
     st.warning(f"Você está prestes a cancelar o pedido #{id_pedido}.")
     justificativa = st.text_area("Justificativa do Cancelamento", placeholder="Informe o motivo (mínimo de 5 caracteres)...")
     col1, col2 = st.columns(2)
@@ -186,7 +186,7 @@ def modal_cancelar_pedido(id_pedido):
             else:
                 db = SessionLocal()
                 try:
-                    cancelar_venda(db=db, id_pedido=id_pedido, justificativa=justificativa, id_usuario=1)
+                    cancelar_venda(db=db, id_pedido=id_pedido, justificativa=justificativa, usuario=usuario_atual)
                     st.session_state["sucesso_msg"] = f"Pedido #{id_pedido} cancelado com sucesso!"
                     st.rerun()
                 except Exception as e:
@@ -284,7 +284,7 @@ def render_gestao_vendas(usuario_atual):
                                 modal_historico_pedido(p)
 
                             if st.button("Cancelar", key=f"canc_{p.id_pedido_venda}", disabled=p.status_venda in ["Cancelado", "Concluído"], use_container_width=True):
-                                modal_cancelar_pedido(p.id_pedido_venda)
+                                modal_cancelar_pedido(p.id_pedido_venda, usuario_atual)
 
         with aba_orcamentos:
             consulta_orc = db.query(PedidoVenda).filter(PedidoVenda.status_venda == "Orcamento").order_by(PedidoVenda.data_venda.desc()).all()
