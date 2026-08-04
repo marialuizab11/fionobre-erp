@@ -47,7 +47,7 @@ class InventarioFisico(Base):
     id_inventario = Column(Integer, primary_key=True, autoincrement=True)
     status = Column(String(20), default='ABERTO')  # Status: ABERTO, CONCLUIDO, CANCELADO
     id_usuario = Column(Integer, nullable=False)
-    data_inicio = Column(DateTime, default=datetime.utcnow, nullable=False)
+    data_inicio = Column(DateTime, default=datetime.now, nullable=False)
     data_conclusao = Column(DateTime, nullable=True)
     observacoes = Column(String(255), nullable=True)
 
