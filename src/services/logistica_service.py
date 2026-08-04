@@ -22,7 +22,10 @@ def criar_entrega_para_pedido(db: Session, id_pedido: int, data_previsao: dateti
     db.refresh(nova_entrega)
     return nova_entrega
 
-def atualizar_status_logistica(db: Session, id_entrega: int, novo_status: str, id_usuario: int = None, nome_usuario: str = None):
+def atualizar_status_logistica(db: Session, id_entrega: int, novo_status: str, id_usuario: int, nome_usuario: str):
+    if not id_usuario or not nome_usuario:
+        raise ValueError("A identificação do usuário é obrigatória para registrar alterações de logística.")
+
     entrega = db.query(Entrega).filter(Entrega.id_entrega == id_entrega).first()
     if not entrega:
         raise ValueError(f"Entrega com ID {id_entrega} não encontrada.")

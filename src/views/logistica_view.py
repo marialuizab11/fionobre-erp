@@ -7,40 +7,9 @@ from src.services.logistica_service import listar_entregas, atualizar_status_log
 from src.views.components.ui_components import render_cabecalho
 
 
-_USUARIOS_MOCK = [
-    {"id_usuario": 1, "nome": "Ana Torres"},
-    {"id_usuario": 2, "nome": "Bruno Lima"},
-    {"id_usuario": 3, "nome": "Carla Souza"},
-]
-
-
-def _obter_usuario_logado():
-    usuario = st.session_state.get("usuario", _USUARIOS_MOCK[0])
-    return usuario.get("id_usuario"), usuario.get("nome", "Desconhecido")
-
-
-def _garantir_usuario_mock():
-    """MOCK TEMPORÁRIO — ver docstring de _obter_usuario_logado()."""
-    if "usuario" not in st.session_state:
-        st.session_state["usuario"] = _USUARIOS_MOCK[0]
-
-    with st.sidebar:
-        st.caption("⚠️ Login ainda não implementado — usuário simulado")
-        nomes = [u["nome"] for u in _USUARIOS_MOCK]
-        atual = st.session_state["usuario"]["nome"]
-        escolha = st.selectbox(
-            "Simular usuário logado",
-            nomes,
-            index=nomes.index(atual),
-            key="mock_usuario_select"
-        )
-        st.session_state["usuario"] = next(u for u in _USUARIOS_MOCK if u["nome"] == escolha)
-
-
 def _mostrar_flash_banner():
     """
-    Banner de confirmação que fica visível por alguns segundos (controlado via JS,
-    não pelo timer fixo/curto do st.toast) e depois desaparece com fade-out.
+    Banner de confirmação visível por alguns segundos controlado via JS.
     """
     flash = st.session_state.pop("flash_message", None)
     if not flash:
@@ -97,15 +66,14 @@ def _modal_historico(db, id_entrega, id_pedido_str):
         st.markdown("---")
 
 
-def render_logistica():
+def render_logistica(usuario_atual):
     render_cabecalho("Gestão Logística", "Painel de controle para acompanhamento de entregas, endereços e despachos.")
-    _garantir_usuario_mock()
     _mostrar_flash_banner()
     
     db = SessionLocal()
     try:
         st.subheader("Filtro Operacional")
-        opcoes_filtro = ["Todas", "Pendente", "Em separação", "Enviado", "Entregue"]
+        opcoes_filtro = ["Todas", "Pendente", "Em separação", "Enviado", "Entregue", "Falha"]
         filtro_status = st.selectbox(
             "Filtrar por Status",
             options=opcoes_filtro
@@ -159,7 +127,7 @@ def render_logistica():
                     with st.form(key=f"form_entrega_{e.id_entrega}"):
                         st.markdown("**Atualizar Status:**")
 
-                        opcoes_status = ["Pendente", "Em separação", "Enviado", "Entregue"]
+                        opcoes_status = ["Pendente", "Em separação", "Enviado", "Entregue", "Falha"]
                         indice_atual = opcoes_status.index(status_atual) if status_atual in opcoes_status else 0
 
                         novo_status_opcao = st.selectbox(
@@ -173,17 +141,16 @@ def render_logistica():
 
                         if btn_salvar:
                             try:
-                                id_usuario_logado, nome_usuario_logado = _obter_usuario_logado()
                                 atualizar_status_logistica(
                                     db=db,
                                     id_entrega=e.id_entrega,
                                     novo_status=novo_status_opcao,
-                                    id_usuario=id_usuario_logado,
-                                    nome_usuario=nome_usuario_logado,
+                                    id_usuario=usuario_atual.id_usuario,
+                                    nome_usuario=usuario_atual.nome,
                                 )
                                 st.session_state["flash_message"] = {
                                     "tipo": "sucesso",
-                                    "mensagem": f"Status atualizado para **{novo_status_opcao}** por {nome_usuario_logado}.",
+                                    "mensagem": f"Status atualizado para **{novo_status_opcao}** por {usuario_atual.nome}.",
                                 }
                                 st.rerun()
                             except Exception as ex:
