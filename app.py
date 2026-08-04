@@ -34,10 +34,7 @@ def main():
     preparar_banco()
     usuario_atual = exigir_login_google()
 
-    st.sidebar.image(
-        "https://via.placeholder.com/150x50/E3EDF7/2E7D32?text=FioNobre+ERP",
-        use_container_width=True,
-    )
+    st.sidebar.markdown("## 🧵 FioNobre ERP")
     st.sidebar.markdown("### Menu Operacional")
 
     rotas_possiveis = {}
@@ -51,7 +48,7 @@ def main():
         rotas_possiveis["PCP e Producao"] = lambda: render_producao(usuario_atual)
     if usuario_atual.pode("vendas.gerenciar"):
         rotas_possiveis["Pedidos de Venda"] = lambda: render_vendas(usuario_atual)
-        rotas_possiveis["Gestao de Vendas"] = render_gestao_vendas
+        rotas_possiveis["Gestao de Vendas"] = lambda: render_gestao_vendas(usuario_atual)
     if usuario_atual.pode("financeiro.gerenciar"):
         rotas_possiveis["Financeiro"] = lambda: render_financeiro(usuario_atual)
     if usuario_atual.pode("logistica.gerenciar"):
@@ -67,6 +64,7 @@ def main():
     st.sidebar.markdown("---")
     st.sidebar.info("Sistema integrado de apoio a decisao (2026.1).")
     render_usuario_sidebar(usuario_atual)
+    
     rotas_possiveis[pagina_selecionada]()
 
 
