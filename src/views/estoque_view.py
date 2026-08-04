@@ -8,7 +8,7 @@ from src.database.models.core import MovimentacaoEstoque
 from src.services.estoque_service import transferir_estoque, ajustar_estoque_manual
 from src.views.components.ui_components import render_cabecalho
 
-def render_estoque(usuario_atual=1):
+def render_estoque(usuario_atual):
     render_cabecalho("Painel de Estoque", "Gerencie saldos, localizações e movimentações.")
     
     if "sucesso_estoque_msg" in st.session_state:
@@ -80,7 +80,7 @@ def render_estoque(usuario_atual=1):
                                 st.error("A quantidade não pode ser zero.")
                             else:
                                 try:
-                                    ajustar_estoque_manual(db, item_ajuste.id_item, local_ajuste.id_localizacao, qtd_ajuste, usuario_atual, obs_ajuste)
+                                    ajustar_estoque_manual(db, item_ajuste.id_item, local_ajuste.id_localizacao, qtd_ajuste, usuario_atual.id_usuario, obs_ajuste)
                                     st.session_state["sucesso_estoque_msg"] = "Ajuste registrado com sucesso!"
                                     st.rerun()
                                 except Exception as e:
@@ -101,7 +101,7 @@ def render_estoque(usuario_atual=1):
                                 st.error("Origem e destino não podem ser iguais.")
                             else:
                                 try:
-                                    transferir_estoque(db, item_transf.id_item, qtd_transf, loc_origem.id_localizacao, loc_destino.id_localizacao, usuario_atual, obs_transf)
+                                    transferir_estoque(db, item_transf.id_item, qtd_transf, loc_origem.id_localizacao, loc_destino.id_localizacao, usuario_atual.id_usuario, obs_transf)
                                     st.session_state["sucesso_estoque_msg"] = "Transferência concluída!"
                                     st.rerun()
                                 except Exception as e:
@@ -121,6 +121,8 @@ def render_estoque(usuario_atual=1):
             else:
                 dados_mov = []
                 for m in movs:
+                    nome_usuario = m.usuario.nome if getattr(m, 'usuario', None) else f"ID {m.id_usuario}"
+                    
                     dados_mov.append({
                         "Data": m.data_movimento.strftime('%d/%m/%Y %H:%M') if m.data_movimento else "-",
                         "Tipo": m.tipo_movimento,
@@ -128,10 +130,10 @@ def render_estoque(usuario_atual=1):
                         "Qtd": float(m.quantidade),
                         "Origem": m.local_origem.nome if getattr(m, 'local_origem', None) else "-",
                         "Destino": m.local_destino.nome if getattr(m, 'local_destino', None) else "-",
+                        "Usuário": nome_usuario,
                         "Observação": m.observacao or "-"
                     })
                 st.dataframe(pd.DataFrame(dados_mov), use_container_width=True, hide_index=True)
-
     except Exception as e:
         st.error(f"Erro ao carregar o painel de estoque: {e}")
     finally:
