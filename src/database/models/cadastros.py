@@ -41,3 +41,12 @@ class Item(Base):
     movimentacoes = relationship("MovimentacaoEstoque", back_populates="item")
     ordens_producao = relationship("OrdemProducao", back_populates="produto")
     consumos_producao = relationship("ConsumoProducao", back_populates="insumo")
+    ficha_tecnica = relationship(
+        "FichaTecnica", back_populates="produto", uselist=False,
+        foreign_keys="FichaTecnica.id_item_produto",
+    )
+    fichas_componente = relationship(
+        "ItemFichaTecnica", back_populates="insumo",
+        foreign_keys="ItemFichaTecnica.id_item_insumo",
+    )
+    reservas_producao = relationship("ReservaMaterial", back_populates="insumo")

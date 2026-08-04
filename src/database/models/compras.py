@@ -38,6 +38,7 @@ class PedidoCompra(Base):
     fornecedor = relationship("Fornecedor", back_populates="pedidos")
     itens = relationship("ItemCompra", back_populates="pedido", cascade="all, delete-orphan")
     lancamentos = relationship("LancamentoFinanceiro", back_populates="pedido_compra")
+    necessidades = relationship("NecessidadeCompra", back_populates="pedido_compra")
 
 
 class ItemCompra(Base):
@@ -55,3 +56,29 @@ class ItemCompra(Base):
 
     pedido = relationship("PedidoCompra", back_populates="itens")
     item = relationship("Item", back_populates="itens_comprados")
+
+
+class NecessidadeCompra(Base):
+    __tablename__ = "necessidade_compra"
+
+    id_necessidade = Column(Integer, primary_key=True, autoincrement=True)
+    id_item = Column(Integer, ForeignKey("item.id_item"), nullable=False)
+    id_item_produto = Column(Integer, ForeignKey("item.id_item"), nullable=True)
+    id_pedido_compra = Column(
+        Integer, ForeignKey("pedido_compra.id_pedido_compra"), nullable=True
+    )
+    id_usuario = Column(Integer, ForeignKey("usuario.id_usuario"), nullable=False)
+    quantidade_necessaria = Column(Numeric(12, 4), nullable=False)
+    saldo_disponivel = Column(Numeric(12, 4), nullable=False)
+    quantidade_faltante = Column(Numeric(12, 4), nullable=False)
+    origem = Column(String(50), nullable=False, default="PCP")
+    status_necessidade = Column(String(20), nullable=False, default="PENDENTE")
+    data_criacao = Column(DateTime, nullable=False, default=datetime.utcnow)
+    data_atualizacao = Column(
+        DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    item = relationship("Item", foreign_keys=[id_item])
+    produto = relationship("Item", foreign_keys=[id_item_produto])
+    pedido_compra = relationship("PedidoCompra", back_populates="necessidades")
+    usuario = relationship("Usuario")
