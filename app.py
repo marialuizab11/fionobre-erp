@@ -54,7 +54,7 @@ def main():
     if usuario_atual.pode("financeiro.gerenciar"):
         rotas_possiveis["Financeiro"] = lambda: render_financeiro(usuario_atual)
     if usuario_atual.pode("logistica.gerenciar"):
-        rotas_possiveis["Gestao Logistica"] = render_logistica
+        rotas_possiveis["Gestao Logistica"] = lambda: render_logistica(usuario_atual)
     if usuario_atual.pode("usuarios.gerenciar") or usuario_atual.pode("auditoria.visualizar"):
         rotas_possiveis["Administracao"] = lambda: render_admin(usuario_atual)
 
@@ -64,7 +64,6 @@ def main():
 
     pagina_selecionada = st.sidebar.radio("Navegar para:", list(rotas_possiveis))
     st.sidebar.markdown("---")
-    st.sidebar.info("Sistema integrado de apoio a decisao (2026.1).")
     render_usuario_sidebar(usuario_atual)
     
     rotas_possiveis[pagina_selecionada]()
