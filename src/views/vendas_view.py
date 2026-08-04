@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 from src.database.connection import SessionLocal
 from src.database.models.cadastros import Cliente, Item
-from src.services.venda_service import criar_pedido_venda
+from src.services.venda_service import criar_orcamento, criar_pedido_venda
 from src.services.logistica_service import criar_entrega_para_pedido
 from src.views.components.ui_components import render_cabecalho
 from src.services.financeiro_service import criar_conta_a_receber
@@ -52,17 +52,13 @@ def modal_resumo_pedido(id_cliente, carrinho_itens, valor_frete, modalidade_entr
     
     st.divider()
     
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns([2, 2, 1])
     with col1:
-        if st.button("Confirmar Pedido", type="primary", use_container_width=True):
+        if st.button("Confirmar Pedido de Venda", type="primary", use_container_width=True):
             db = SessionLocal()
             try:
                 carrinho_payload = [
-                    {
-                        "id_item": i["id_item"],
-                        "quantidade": i["quantidade"],
-                        "valor_unitario": i["valor_unitario"]
-                    }
+                    {"id_item": i["id_item"], "quantidade": i["quantidade"], "valor_unitario": i["valor_unitario"]}
                     for i in carrinho_itens
                 ]
                 
@@ -90,18 +86,35 @@ def modal_resumo_pedido(id_cliente, carrinho_itens, valor_frete, modalidade_entr
                 )
                 
                 st.session_state.carrinho_itens = []
-                st.session_state.mensagem_sucesso = f"Pedido #ID {pedido.id_pedido_venda} fechado com sucesso! Valor Total: R$ {valor_total_compra:.2f}"
+                st.session_state.mensagem_sucesso = f"Pedido #ID {pedido.id_pedido_venda} fechado com sucesso!"
                 st.rerun()
                 
             except Exception as e:
                 st.error(f"Erro ao fechar pedido: {e}")
             finally:
                 db.close()
-                
-    with col2:
-        if st.button("Cancelar", use_container_width=True):
-            st.rerun()
 
+    with col2:
+        if st.button("Salvar como Orçamento", use_container_width=True):
+            db = SessionLocal()
+            try:
+                carrinho_payload = [
+                    {"id_item": i["id_item"], "quantidade": i["quantidade"], "valor_unitario": i["valor_unitario"]}
+                    for i in carrinho_itens
+                ]
+                orcamento = criar_orcamento(db, id_cliente, carrinho_payload, usuario_atual)
+                st.session_state.carrinho_itens = []
+                st.session_state.mensagem_sucesso = f"Orçamento #ID {orcamento.id_pedido_venda} gerado com sucesso!"
+                st.rerun()
+            except Exception as e:
+                st.error(f"Erro ao gerar orçamento: {e}")
+            finally:
+                db.close()
+
+    with col3:
+        if st.button("Voltar", use_container_width=True):
+            st.rerun()
+            
 def render_vendas(usuario_atual):
     if "carrinho_itens" not in st.session_state:
         st.session_state.carrinho_itens = []

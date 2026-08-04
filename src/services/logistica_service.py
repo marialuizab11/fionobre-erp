@@ -89,6 +89,17 @@ def criar_entrega_para_pedido(
     db.refresh(nova_entrega)
     return nova_entrega
 
+def atualizar_status_logistica(db: Session, id_entrega: int, novo_status: str, id_usuario: int, nome_usuario: str):
+    if not id_usuario or not nome_usuario:
+        raise ValueError("A identificação do usuário é obrigatória para registrar alterações de logística.")
+
+    entrega = db.query(Entrega).filter(Entrega.id_entrega == id_entrega).first()
+    if not entrega:
+        raise ValueError(f"Entrega com ID {id_entrega} não encontrada.")
+        
+    status_validos = ["Pendente", "Em separação", "Enviado", "Entregue", "Falha"]
+    if novo_status not in status_validos:
+        raise ValueError(f"Status inválido. Escolha entre: {status_validos}")
 
 def _aplicar_status(
     db: Session,
