@@ -307,28 +307,35 @@ def criar_fornecedor(
     db: Session,
     usuario: UsuarioAutenticado,
     razao_social: str,
-    cnpj: str,
+    cnpj_cpf: str,
     **dados,
 ) -> Fornecedor:
     exigir_permissao(usuario, "cadastros.gerenciar")
     razao_social = razao_social.strip()
-    cnpj = cnpj.strip()
+    cnpj_cpf = cnpj_cpf.strip()
 
-    if not razao_social or not cnpj:
-        raise ValueError("Razão social e CNPJ são obrigatórios.")
+    if not razao_social or not cnpj_cpf:
+        raise ValueError("Razão social e CPF/CNPJ são obrigatórios.")
 
     try:
-        if db.query(Fornecedor).filter(Fornecedor.cnpj == cnpj).first():
-            raise ValueError("Já existe um fornecedor com este CNPJ.")
+        if db.query(Fornecedor).filter(Fornecedor.cnpj_cpf == cnpj_cpf).first():
+            raise ValueError("Já existe um fornecedor com este CPF/CNPJ.")
 
         usuario_db = db.get(Usuario, usuario.id_usuario)
+        if usuario_db is None or not usuario_db.ativo:
+            raise PermissionError("Usuário responsável inválido ou inativo.")
 
         fornecedor = Fornecedor(
             razao_social=razao_social,
-            cnpj=cnpj,
-            nome_fantasia=(dados.get("nome_fantasia") or "").strip() or None,
+            cnpj_cpf=cnpj_cpf,
             email=(dados.get("email") or "").strip() or None,
             telefone=(dados.get("telefone") or "").strip() or None,
+            cep=(dados.get("cep") or "").strip() or None,
+            rua=(dados.get("rua") or "").strip() or None,
+            numero=(dados.get("numero") or "").strip() or None,
+            bairro=(dados.get("bairro") or "").strip() or None,
+            cidade=(dados.get("cidade") or "").strip() or None,
+            uf=(dados.get("uf") or "").strip().upper() or None,
         )
         db.add(fornecedor)
         db.flush()
@@ -339,6 +346,7 @@ def criar_fornecedor(
             acao="CRIAR_FORNECEDOR",
             entidade="Fornecedor",
             id_registro=fornecedor.id_fornecedor,
+            detalhes={"razao_social": razao_social, "cnpj_cpf": cnpj_cpf},
         )
         db.commit()
         db.refresh(fornecedor)
@@ -356,7 +364,7 @@ def editar_fornecedor(
     usuario: UsuarioAutenticado,
     id_fornecedor: int,
     razao_social: str,
-    cnpj: str,
+    cnpj_cpf: str,
     **dados,
 ) -> Fornecedor:
     exigir_permissao(usuario, "cadastros.gerenciar")
@@ -365,22 +373,32 @@ def editar_fornecedor(
         raise ValueError(f"Fornecedor #{id_fornecedor} não encontrado.")
 
     razao_social = razao_social.strip()
-    cnpj = cnpj.strip()
-    if not razao_social or not cnpj:
-        raise ValueError("Razão social e CNPJ são obrigatórios.")
+    cnpj_cpf = cnpj_cpf.strip()
+    if not razao_social or not cnpj_cpf:
+        raise ValueError("Razão social e CPF/CNPJ são obrigatórios.")
 
     try:
-        existente = db.query(Fornecedor).filter(Fornecedor.cnpj == cnpj, Fornecedor.id_fornecedor != id_fornecedor).first()
+        existente = db.query(Fornecedor).filter(
+            Fornecedor.cnpj_cpf == cnpj_cpf,
+            Fornecedor.id_fornecedor != id_fornecedor,
+        ).first()
         if existente:
-            raise ValueError("Já existe outro fornecedor cadastrado com este CNPJ.")
+            raise ValueError("Já existe outro fornecedor cadastrado com este CPF/CNPJ.")
 
         usuario_db = db.get(Usuario, usuario.id_usuario)
+        if usuario_db is None or not usuario_db.ativo:
+            raise PermissionError("Usuário responsável inválido ou inativo.")
 
         fornecedor.razao_social = razao_social
-        fornecedor.cnpj = cnpj
-        fornecedor.nome_fantasia = (dados.get("nome_fantasia") or "").strip() or None
+        fornecedor.cnpj_cpf = cnpj_cpf
         fornecedor.email = (dados.get("email") or "").strip() or None
         fornecedor.telefone = (dados.get("telefone") or "").strip() or None
+        fornecedor.cep = (dados.get("cep") or "").strip() or None
+        fornecedor.rua = (dados.get("rua") or "").strip() or None
+        fornecedor.numero = (dados.get("numero") or "").strip() or None
+        fornecedor.bairro = (dados.get("bairro") or "").strip() or None
+        fornecedor.cidade = (dados.get("cidade") or "").strip() or None
+        fornecedor.uf = (dados.get("uf") or "").strip().upper() or None
 
         registrar_log(
             db,
@@ -389,6 +407,7 @@ def editar_fornecedor(
             acao="EDITAR_FORNECEDOR",
             entidade="Fornecedor",
             id_registro=fornecedor.id_fornecedor,
+            detalhes={"razao_social": razao_social, "cnpj_cpf": cnpj_cpf},
         )
         db.commit()
         db.refresh(fornecedor)
@@ -416,7 +435,10 @@ def remover_fornecedor(db: Session, usuario: UsuarioAutenticado, id_fornecedor: 
             acao="REMOVER_FORNECEDOR",
             entidade="Fornecedor",
             id_registro=fornecedor.id_fornecedor,
-            detalhes={"razao_social": fornecedor.razao_social, "cnpj": fornecedor.cnpj},
+            detalhes={
+                "razao_social": fornecedor.razao_social,
+                "cnpj_cpf": fornecedor.cnpj_cpf,
+            },
         )
         db.delete(fornecedor)
         db.commit()

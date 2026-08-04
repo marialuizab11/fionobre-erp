@@ -57,6 +57,7 @@ def criar_pedido_venda(
                 id_item=id_item,
                 quantidade=quantidade,
                 id_usuario=usuario.id_usuario,
+                confirmar_transacao=False,
             )
             if item_estoque.tipo_item != "PRODUTO_ACABADO":
                 raise ValueError(
@@ -135,7 +136,13 @@ def cancelar_venda(
 
     itens_vendidos = db.query(ItemVenda).filter(ItemVenda.id_pedido_venda == id_pedido).all()
     for item in itens_vendidos:
-        estornar_estoque(db, item.id_item, item.quantidade_vendida, usuario.id_usuario)
+        estornar_estoque(
+            db,
+            item.id_item,
+            item.quantidade_vendida,
+            usuario.id_usuario,
+            confirmar_transacao=False,
+        )
 
     if entrega:
         entrega.status_logistica = "Falha"
@@ -253,6 +260,7 @@ def converter_orcamento_em_venda(
             id_item=iv.id_item,
             quantidade=iv.quantidade_vendida,
             id_usuario=usuario.id_usuario,
+            confirmar_transacao=False,
         )
 
     pedido.status_venda = "Confirmado"
@@ -289,7 +297,13 @@ def editar_pedido_venda(
 
     if pedido.status_venda == "Confirmado":
         for iv in pedido.itens:
-            estornar_estoque(db, iv.id_item, iv.quantidade_vendida, usuario.id_usuario)
+            estornar_estoque(
+                db,
+                iv.id_item,
+                iv.quantidade_vendida,
+                usuario.id_usuario,
+                confirmar_transacao=False,
+            )
 
     db.query(ItemVenda).filter(ItemVenda.id_pedido_venda == id_pedido).delete()
 
@@ -300,7 +314,13 @@ def editar_pedido_venda(
         vlr = Decimal(str(linha["valor_unitario"]))
 
         if pedido.status_venda == "Confirmado":
-            baixar_estoque(db=db, id_item=id_item, quantidade=qtd, id_usuario=usuario.id_usuario)
+            baixar_estoque(
+                db=db,
+                id_item=id_item,
+                quantidade=qtd,
+                id_usuario=usuario.id_usuario,
+                confirmar_transacao=False,
+            )
 
         valor_total += qtd * vlr
         db.add(ItemVenda(
@@ -373,6 +393,7 @@ def registrar_devolucao_venda(
             id_usuario=usuario.id_usuario,
             tipo_movimento="ENTRADA_DEVOLUCAO_VENDA",
             custo_unitario=custo_unitario_item,
+            confirmar_transacao=False,
         )
 
         item_venda.quantidade_vendida -= qtd_dev
