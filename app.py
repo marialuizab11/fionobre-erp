@@ -12,6 +12,7 @@ from src.views.cadastros_view import render_cadastros
 from src.views.components.ui_components import aplicar_estilo_global
 from src.views.compras_view import render_compras
 from src.views.estoque_view import render_estoque
+from src.views.inventario_view import render_inventario
 from src.views.financeiro_view import render_financeiro
 from src.views.gestao_vendas_view import render_gestao_vendas
 from src.views.logistica_view import render_logistica
@@ -41,7 +42,8 @@ def main():
     if usuario_atual.pode("cadastros.gerenciar"):
         rotas_possiveis["Cadastros"] = lambda: render_cadastros(usuario_atual)
     if usuario_atual.pode("estoque.visualizar"):
-        rotas_possiveis["Controle de Estoque"] = render_estoque
+        rotas_possiveis["Controle de Estoque"] = lambda: render_estoque(usuario_atual)
+        rotas_possiveis["Inventário Físico"] = lambda: render_inventario(usuario_atual)
     if usuario_atual.pode("compras.gerenciar"):
         rotas_possiveis["Compras"] = lambda: render_compras(usuario_atual)
     if usuario_atual.pode("producao.gerenciar"):
