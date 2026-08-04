@@ -1,5 +1,4 @@
 from datetime import date, timedelta
-
 import streamlit as st
 
 from src.database.connection import SessionLocal
@@ -8,91 +7,162 @@ from src.database.models.compras import Fornecedor, NecessidadeCompra
 from src.services.compra_service import (
     cancelar_compra,
     confirmar_compra,
-    criar_fornecedor,
     criar_pedido_por_necessidades,
     criar_pedido_compra,
+    editar_pedido_compra,
+    remover_pedido_compra,
     listar_pedidos_compra,
     receber_compra,
 )
 from src.views.components.ui_components import render_cabecalho
 
 
-def _cadastro_fornecedor(db, usuario_atual):
-    with st.expander("Cadastrar fornecedor"):
-        with st.form("novo_fornecedor", clear_on_submit=True):
-            razao = st.text_input("Razão social *")
-            documento = st.text_input("CPF/CNPJ *")
-            col1, col2 = st.columns(2)
-            email = col1.text_input("E-mail")
-            telefone = col2.text_input("Telefone")
-            col3, col4, col5 = st.columns([2, 3, 1])
-            cep = col3.text_input("CEP")
-            rua = col4.text_input("Rua")
-            numero = col5.text_input("Número")
-            col6, col7, col8 = st.columns([2, 2, 1])
-            bairro = col6.text_input("Bairro")
-            cidade = col7.text_input("Cidade")
-            uf = col8.text_input("UF", max_chars=2)
-            salvar = st.form_submit_button("Cadastrar fornecedor", type="primary")
-        if salvar:
+# ==========================================
+# MODAIS DE EDIÇÃO E REMOÇÃO DE PEDIDO
+# ==========================================
+
+@st.dialog("Editar Pedido de Compra")
+def modal_editar_pedido(pedido, usuario_atual):
+    db = SessionLocal()
+    try:
+        fornecedores = db.query(Fornecedor).order_by(Fornecedor.razao_social).all()
+        itens = db.query(Item).order_by(Item.descricao).all()
+        
+        fornecedor_map = {f.id_fornecedor: f for f in fornecedores}
+        item_map = {i.id_item: i for i in itens}
+
+        # Fornecedor Atual
+        idx_forn = list(fornecedor_map.keys()).index(pedido.id_fornecedor) if pedido.id_fornecedor in fornecedor_map else 0
+        fornecedor_id = st.selectbox(
+            "Fornecedor",
+            list(fornecedor_map.keys()),
+            index=idx_forn,
+            format_func=lambda valor: fornecedor_map[valor].razao_social,
+        )
+
+        # Itens Atuais
+        itens_selecionados_ids = [linha.id_item for linha in pedido.itens if linha.id_item in item_map]
+        itens_ids = st.multiselect(
+            "Itens da compra",
+            list(item_map.keys()),
+            default=itens_selecionados_ids,
+            format_func=lambda valor: f"{item_map[valor].descricao} — Saldo: {item_map[valor].saldo_estoque}",
+        )
+
+        quantidades_e_custos = {linha.id_item: (float(linha.quantidade_comprada), float(linha.custo_unitario)) for linha in pedido.itens}
+
+        with st.form("form_editar_pedido"):
+            linhas = []
+            for item_id in itens_ids:
+                item = item_map[item_id]
+                st.markdown(f"**{item.descricao}**")
+                
+                qtd_padrao, custo_padrao = quantidades_e_custos.get(item_id, (1.0, float(item.custo_medio or 0)))
+                
+                col1, col2 = st.columns(2)
+                quantidade = col1.number_input("Quantidade", min_value=0.01, value=qtd_padrao, key=f"ed_qtd_{item_id}")
+                custo = col2.number_input("Custo unitário (R$)", min_value=0.0, value=custo_padrao, key=f"ed_custo_{item_id}")
+                linhas.append({"id_item": item_id, "quantidade": quantidade, "custo_unitario": custo})
+                
+            if st.form_submit_button("Salvar Alterações", type="primary", use_container_width=True):
+                try:
+                    editar_pedido_compra(db, pedido.id_pedido_compra, fornecedor_id, linhas, usuario_atual.id_usuario)
+                    st.toast("Pedido atualizado com sucesso!", icon="✅")
+                    st.rerun()
+                except Exception as erro:
+                    st.error(str(erro))
+    finally:
+        db.close()
+
+
+@st.dialog("Remover Pedido de Compra")
+def modal_remover_pedido(pedido, usuario_atual):
+    st.warning(f"Tem certeza que deseja excluir permanentemente o Pedido de Compra **#{pedido.id_pedido_compra}**?")
+    st.caption("Esta ação liberará eventuais necessidades do PCP vinculadas e não poderá ser desfeita.")
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("Confirmar Exclusão", type="primary", use_container_width=True):
+            db = SessionLocal()
             try:
-                criar_fornecedor(
-                    db, razao, documento, usuario_atual.id_usuario,
-                    email=email, telefone=telefone, cep=cep, rua=rua,
-                    numero=numero, bairro=bairro, cidade=cidade, uf=uf,
-                )
-                st.success("Fornecedor cadastrado.")
+                remover_pedido_compra(db, pedido.id_pedido_compra, usuario_atual.id_usuario)
+                st.toast("Pedido removido com sucesso!", icon="✅")
                 st.rerun()
-            except Exception as erro:
-                st.error(str(erro))
+            except Exception as e:
+                st.error(str(e))
+            finally:
+                db.close()
+    with col2:
+        if st.button("Cancelar", use_container_width=True):
+            st.rerun()
 
 
 def _novo_pedido(db, usuario_atual):
+    # Exibe o toast e limpa o flag da sessão
+    if "toast_pedido_criado" in st.session_state:
+        msg = st.session_state.pop("toast_pedido_criado")
+        st.toast(msg, icon="✅")
+
     fornecedores = db.query(Fornecedor).order_by(Fornecedor.razao_social).all()
     itens = db.query(Item).order_by(Item.descricao).all()
     if not fornecedores or not itens:
-        st.info("Cadastre pelo menos um fornecedor e um item antes de criar uma compra.")
+        st.info("Cadastre pelo menos um fornecedor no Módulo de Cadastros e um item antes de criar uma compra.")
         return
 
     fornecedor_map = {f.id_fornecedor: f for f in fornecedores}
     item_map = {i.id_item: i for i in itens}
+    
+    # Controle de versão do formulário para reset limpo
+    if "form_compra_versao" not in st.session_state:
+        st.session_state["form_compra_versao"] = 0
+
+    versao = st.session_state["form_compra_versao"]
+
     fornecedor_id = st.selectbox(
         "Fornecedor",
         list(fornecedor_map),
+        key=f"compra_fornecedor_{versao}",
         format_func=lambda valor: fornecedor_map[valor].razao_social,
     )
     itens_ids = st.multiselect(
         "Itens da compra",
         list(item_map),
+        key=f"compra_itens_{versao}",
         format_func=lambda valor: (
             f"{item_map[valor].descricao} — saldo {item_map[valor].saldo_estoque} "
             f"{item_map[valor].unidade_medida}"
         ),
     )
-    with st.form("novo_pedido_compra"):
+
+    with st.form("novo_pedido_compra", clear_on_submit=True):
         linhas = []
         for item_id in itens_ids:
             item = item_map[item_id]
             st.markdown(f"**{item.descricao}**")
             col1, col2 = st.columns(2)
             quantidade = col1.number_input(
-                "Quantidade", min_value=0.01, value=1.0, key=f"compra_qtd_{item_id}"
+                "Quantidade", min_value=0.01, value=1.0, key=f"compra_qtd_{item_id}_{versao}"
             )
             custo = col2.number_input(
                 "Custo unitário (R$)", min_value=0.0,
-                value=float(item.custo_medio or 0), key=f"compra_custo_{item_id}",
+                value=float(item.custo_medio or 0), key=f"compra_custo_{item_id}_{versao}",
             )
             linhas.append({"id_item": item_id, "quantidade": quantidade, "custo_unitario": custo})
-        criar = st.form_submit_button("Criar pedido de compra", type="primary")
+            
+        criar = st.form_submit_button("Criar pedido de compra", type="primary", use_container_width=True)
+
     if criar:
         try:
             pedido = criar_pedido_compra(db, fornecedor_id, linhas, usuario_atual.id_usuario)
-            st.success(f"Pedido de compra #{pedido.id_pedido_compra} criado.")
+            
+            # Incrementa a versão do formulário para forçar a criação de widgets limpos no rerun
+            st.session_state["form_compra_versao"] += 1
+            
+            # Define a mensagem do Toast
+            st.session_state["toast_pedido_criado"] = f"Pedido de compra #{pedido.id_pedido_compra} criado com sucesso!"
             st.rerun()
         except Exception as erro:
             st.error(str(erro))
-
-
+                        
 def _gerenciar_pedidos(db, usuario_atual):
     pedidos = listar_pedidos_compra(db)
     if not pedidos:
@@ -101,7 +171,7 @@ def _gerenciar_pedidos(db, usuario_atual):
 
     pedido_map = {p.id_pedido_compra: p for p in pedidos}
     pedido_id = st.selectbox(
-        "Pedido",
+        "Selecione o Pedido",
         list(pedido_map),
         format_func=lambda valor: (
             f"#{valor} — {pedido_map[valor].fornecedor.razao_social} — "
@@ -109,19 +179,31 @@ def _gerenciar_pedidos(db, usuario_atual):
         ),
     )
     pedido = pedido_map[pedido_id]
+
+    col_info1, col_info2 = st.columns([3, 1])
+    with col_info1:
+        st.subheader(f"Pedido #{pedido.id_pedido_compra} ({pedido.status_compra})")
+    with col_info2:
+        if pedido.status_compra == "Criado":
+            col_b1, col_b2 = st.columns(2)
+            if col_b1.button("✏️ Editar", use_container_width=True):
+                modal_editar_pedido(pedido, usuario_atual)
+            if col_b2.button("🗑️ Excluir", use_container_width=True):
+                modal_remover_pedido(pedido, usuario_atual)
+
     st.dataframe(
         [{
             "Item": linha.item.descricao,
             "Quantidade": float(linha.quantidade_comprada),
-            "Custo unitário": float(linha.custo_unitario),
-            "Subtotal": float(linha.quantidade_comprada * linha.custo_unitario),
+            "Custo unitário (R$)": float(linha.custo_unitario),
+            "Subtotal (R$)": float(linha.quantidade_comprada * linha.custo_unitario),
         } for linha in pedido.itens],
         use_container_width=True,
         hide_index=True,
     )
 
     if pedido.status_compra == "Criado":
-        if st.button("Confirmar pedido", type="primary"):
+        if st.button("Confirmar pedido", type="primary", use_container_width=True):
             try:
                 confirmar_compra(db, pedido_id, usuario_atual.id_usuario)
                 st.success("Pedido confirmado.")
@@ -132,7 +214,7 @@ def _gerenciar_pedidos(db, usuario_atual):
         vencimento = st.date_input(
             "Vencimento da conta a pagar", value=date.today() + timedelta(days=30)
         )
-        if st.button("Registrar recebimento", type="primary"):
+        if st.button("Registrar recebimento", type="primary", use_container_width=True):
             try:
                 receber_compra(db, pedido_id, vencimento, usuario_atual.id_usuario)
                 st.success("Compra recebida; estoque e financeiro atualizados.")
@@ -140,17 +222,18 @@ def _gerenciar_pedidos(db, usuario_atual):
             except Exception as erro:
                 st.error(str(erro))
 
-    if pedido.status_compra != "Cancelado":
-        with st.form(f"cancelar_compra_{pedido_id}"):
-            justificativa = st.text_area("Justificativa para cancelamento")
-            cancelar = st.form_submit_button("Cancelar pedido")
-        if cancelar:
-            try:
-                cancelar_compra(db, pedido_id, justificativa, usuario_atual.id_usuario)
-                st.success("Pedido cancelado.")
-                st.rerun()
-            except Exception as erro:
-                st.error(str(erro))
+    if pedido.status_compra not in ["Cancelado", "Recebido"]:
+        with st.expander("Cancelar Pedido"):
+            with st.form(f"cancelar_compra_{pedido_id}"):
+                justificativa = st.text_area("Justificativa para cancelamento")
+                cancelar = st.form_submit_button("Confirmar Cancelamento")
+            if cancelar:
+                try:
+                    cancelar_compra(db, pedido_id, justificativa, usuario_atual.id_usuario)
+                    st.success("Pedido cancelado.")
+                    st.rerun()
+                except Exception as erro:
+                    st.error(str(erro))
 
 
 def _necessidades_compra(db, usuario_atual):
@@ -182,7 +265,7 @@ def _necessidades_compra(db, usuario_atual):
         st.info("Não há necessidades pendentes para transformar em pedido.")
         return
     if not fornecedores:
-        st.warning("Cadastre um fornecedor para atender as necessidades pendentes.")
+        st.warning("Cadastre um fornecedor no Módulo de Cadastros para atender as necessidades pendentes.")
         return
 
     necessidade_map = {item.id_necessidade: item for item in pendentes}
@@ -214,7 +297,7 @@ def _necessidades_compra(db, usuario_atual):
                 value=float(material.custo_medio or 0),
                 key=f"custo_necessidade_{id_item}",
             )
-        gerar = st.form_submit_button("Gerar pedido de compra", type="primary")
+        gerar = st.form_submit_button("Gerar pedido de compra", type="primary", use_container_width=True)
     if gerar:
         try:
             pedido = criar_pedido_por_necessidades(
@@ -229,11 +312,10 @@ def _necessidades_compra(db, usuario_atual):
 def render_compras(usuario_atual):
     render_cabecalho(
         "Compras",
-        "Cadastre fornecedores, emita pedidos e receba materiais no estoque.",
+        "Emita e gerencie pedidos de compra e receba materiais no estoque.",
     )
     db = SessionLocal()
     try:
-        _cadastro_fornecedor(db, usuario_atual)
         aba_necessidades, aba_novo, aba_gestao = st.tabs(
             ["Necessidades do PCP", "Novo pedido", "Acompanhar pedidos"]
         )

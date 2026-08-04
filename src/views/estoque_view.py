@@ -12,7 +12,7 @@ def render_estoque():
         itens = db.query(Item).all()
         
         if not itens:
-            st.warning("Nenhum item cadastrado no banco de dados. Rode o script de popularização.")
+            st.warning("Nenhum item cadastrado no sistema.")
             return
 
         # Métricas rápidas no topo

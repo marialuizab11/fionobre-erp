@@ -1,6 +1,6 @@
 from src.database.models.base import Base
 from src.database.models.cadastros import Cliente, Item
-from src.database.models.vendas import PedidoVenda, ItemVenda
+from src.database.models.vendas import PedidoVenda, ItemVenda, PedidoVendaHistorico
 from src.database.models.compras import Fornecedor, ItemCompra, NecessidadeCompra, PedidoCompra
 from src.database.models.producao import (
     CentroProducao,
@@ -10,7 +10,7 @@ from src.database.models.producao import (
     OrdemProducao,
     ReservaMaterial,
 )
-from src.database.models.logistica import Entrega
+from src.database.models.logistica import Entrega, EntregaStatusHistorico
 from src.database.models.core import MovimentacaoEstoque
 from src.database.models.financeiro import (
     DetalheLancamentoFinanceiro,
@@ -44,4 +44,6 @@ __all__ = [
     "Perfil",
     "Permissao",
     "LogOperacao",
+    "EntregaStatusHistorico",
+    "PedidoVendaHistorico"
 ]
