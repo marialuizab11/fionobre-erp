@@ -1,3 +1,5 @@
+from html import escape
+
 import streamlit as st
 
 from config.settings import ADMIN_EMAILS
@@ -49,10 +51,47 @@ def exigir_login_google():
     return st.session_state["usuario_contexto"]
 
 
-def render_usuario_sidebar(usuario) -> None:
-    st.sidebar.markdown("### Usuário")
-    if usuario.foto_url:
-        st.sidebar.image(usuario.foto_url, width=64)
-    st.sidebar.write(usuario.nome)
-    st.sidebar.caption(f"{usuario.email} · {usuario.perfil}")
-    st.sidebar.button("Sair", on_click=st.logout, use_container_width=True)
+def render_usuario_topbar(usuario) -> None:
+    nome = escape(usuario.nome)
+    email = escape(usuario.email)
+    perfil = escape(usuario.perfil)
+    primeiro_nome = usuario.nome.split()[0] if usuario.nome.split() else "Conta"
+    _, coluna_conta = st.columns([5.8, 1.55], vertical_alignment="center")
+    with coluna_conta:
+        with st.container(key="account_menu"):
+            coluna_foto, coluna_menu = st.columns(
+                [0.3, 1.35], gap=None, vertical_alignment="center"
+            )
+            with coluna_foto:
+                if usuario.foto_url and usuario.foto_url.startswith("https://"):
+                    st.markdown(
+                        f'<img class="fn-account-static-avatar" '
+                        f'src="{escape(usuario.foto_url)}" alt="Foto de {nome}">',
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    iniciais = "".join(
+                        parte[0] for parte in usuario.nome.split()[:2]
+                    ).upper() or "FN"
+                    st.markdown(
+                        f'<div class="fn-account-initials">{escape(iniciais)}</div>',
+                        unsafe_allow_html=True,
+                    )
+            with coluna_menu:
+                with st.popover(primeiro_nome, use_container_width=True):
+                    st.markdown(
+                        f"""
+                        <div class="fn-account-menu">
+                            <div class="fn-account-menu-name">{nome}</div>
+                            <div class="fn-account-menu-email">{email}</div>
+                            <div class="fn-profile-role">{perfil}</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                    st.button(
+                        "Sair da conta",
+                        on_click=st.logout,
+                        use_container_width=True,
+                        key="logout_topbar",
+                    )
