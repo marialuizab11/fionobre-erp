@@ -11,6 +11,7 @@ from src.database.models.usuarios import LogOperacao
 from src.database.models.vendas import PedidoVenda
 from src.services.auth_service import criar_contexto_usuario, sincronizar_usuario_google
 from src.services.cadastro_service import criar_cliente, criar_item
+from src.services.usuario_service import cadastrar_usuario
 from src.services.venda_service import criar_pedido_venda
 
 
@@ -97,6 +98,12 @@ class VendaServiceTest(unittest.TestCase):
         self.assertEqual(1, self.db.query(MovimentacaoEstoque).count())
 
     def test_visualizador_nao_pode_cadastrar_cliente(self):
+        cadastrar_usuario(
+            self.db,
+            self.admin,
+            "viewer@example.com",
+            "Visualizador",
+        )
         usuario = sincronizar_usuario_google(
             self.db,
             claims_google("viewer-google", "viewer@example.com"),
