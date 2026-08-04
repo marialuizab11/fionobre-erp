@@ -1,13 +1,21 @@
-from datetime import datetime
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from src.database.models.producao import (
+    AlocacaoCapacidadeProducao,
+    CapacidadeCentroProducao,
     CentroProducao,
     ConsumoProducao,
     FichaTecnica,
+    InspecaoQualidade,
     ItemFichaTecnica,
+    OperacaoRoteiroProducao,
     OrdemProducao,
+    OrdemOperacaoProducao,
+    PlanejamentoOrdemProducao,
     ReservaMaterial,
+    RoteiroProducao,
 )
 from src.database.models.cadastros import Item
 from src.database.models.usuarios import Usuario
@@ -138,6 +146,292 @@ def criar_centro_producao(db: Session, nome: str, descricao: str, id_usuario: in
         raise
 
 
+def configurar_capacidade_centro(
+    db: Session,
+    id_centro_producao: int,
+    horas_disponiveis_dia,
+    id_usuario: int,
+    hora_inicio_expediente: str = "08:00",
+    dias_uteis: str = "0,1,2,3,4",
+):
+    centro = db.get(CentroProducao, id_centro_producao)
+    horas = Decimal(str(horas_disponiveis_dia))
+    if centro is None or centro.ativo != "S":
+        raise ValueError("Centro de produção inválido ou inativo.")
+    if horas <= 0 or horas > 24:
+        raise ValueError("A capacidade diária deve estar entre 0 e 24 horas.")
+    try:
+        datetime.strptime(hora_inicio_expediente, "%H:%M")
+        dias = sorted({int(item) for item in dias_uteis.split(",")})
+    except (ValueError, TypeError) as erro:
+        raise ValueError("Horário ou dias úteis inválidos.") from erro
+    if not dias or any(item < 0 or item > 6 for item in dias):
+        raise ValueError("Os dias úteis devem utilizar números de 0 a 6.")
+
+    capacidade = centro.capacidade or CapacidadeCentroProducao(
+        id_centro_producao=id_centro_producao
+    )
+    capacidade.horas_disponiveis_dia = horas
+    capacidade.hora_inicio_expediente = hora_inicio_expediente
+    capacidade.dias_uteis = ",".join(str(item) for item in dias)
+    db.add(capacidade)
+    _registrar_log(
+        db,
+        "CONFIGURAR_CAPACIDADE",
+        id_centro_producao,
+        f"Capacidade de {centro.nome}: {horas} hora(s) por dia.",
+        id_usuario,
+    )
+    db.commit()
+    db.refresh(capacidade)
+    return capacidade
+
+
+def obter_roteiro_producao(db: Session, id_item_produto: int):
+    return db.query(RoteiroProducao).filter(
+        RoteiroProducao.id_item_produto == id_item_produto,
+        RoteiroProducao.ativo == "S",
+    ).first()
+
+
+def salvar_roteiro_producao(
+    db: Session,
+    id_item_produto: int,
+    operacoes: list,
+    id_usuario: int,
+    descricao: str = "",
+):
+    produto = db.get(Item, id_item_produto)
+    if produto is None or produto.tipo_item != "PRODUTO_ACABADO":
+        raise ValueError("O roteiro deve pertencer a um produto acabado válido.")
+    if not operacoes:
+        raise ValueError("O roteiro precisa ter pelo menos uma operação.")
+
+    novas_operacoes = []
+    for sequencia, item in enumerate(operacoes, start=1):
+        centro = db.get(CentroProducao, int(item["id_centro_producao"]))
+        if centro is None or centro.ativo != "S":
+            raise ValueError("Todas as operações precisam de um centro ativo.")
+        if centro.capacidade is None:
+            raise ValueError(
+                f"Configure a capacidade do centro '{centro.nome}' antes de usá-lo."
+            )
+        nome = str(item.get("nome_operacao", "")).strip()
+        setup = Decimal(str(item.get("tempo_setup_horas", 0)))
+        unitario = Decimal(str(item.get("tempo_unitario_horas", 0)))
+        if not nome:
+            raise ValueError("O nome de cada operação é obrigatório.")
+        if setup < 0 or unitario < 0 or setup + unitario <= 0:
+            raise ValueError("Cada operação precisa possuir tempo produtivo maior que zero.")
+        novas_operacoes.append(
+            OperacaoRoteiroProducao(
+                sequencia=sequencia,
+                id_centro_producao=centro.id_centro_producao,
+                nome_operacao=nome,
+                recurso=str(item.get("recurso", "")).strip() or None,
+                tempo_setup_horas=setup,
+                tempo_unitario_horas=unitario,
+                instrucoes=str(item.get("instrucoes", "")).strip() or None,
+            )
+        )
+
+    roteiro = db.query(RoteiroProducao).filter(
+        RoteiroProducao.id_item_produto == id_item_produto
+    ).first()
+    acao = "ATUALIZAR_ROTEIRO" if roteiro else "CRIAR_ROTEIRO"
+    if roteiro is None:
+        roteiro = RoteiroProducao(id_item_produto=id_item_produto)
+        db.add(roteiro)
+    elif roteiro.planejamentos:
+        raise ValueError(
+            "Este roteiro já foi utilizado em ordens e tornou-se imutável para "
+            "preservar a rastreabilidade do planejamento."
+        )
+    roteiro.descricao = descricao.strip() or None
+    roteiro.ativo = "S"
+    roteiro.operacoes = novas_operacoes
+    db.flush()
+    _registrar_log(
+        db,
+        acao,
+        roteiro.id_roteiro,
+        f"Roteiro de '{produto.descricao}' salvo com {len(operacoes)} operação(ões).",
+        id_usuario,
+    )
+    db.commit()
+    db.refresh(roteiro)
+    return roteiro
+
+
+def _dias_capacidade(capacidade: CapacidadeCentroProducao) -> set[int]:
+    return {int(item) for item in capacidade.dias_uteis.split(",")}
+
+
+def _inicio_expediente(capacidade: CapacidadeCentroProducao) -> time:
+    return datetime.strptime(capacidade.hora_inicio_expediente, "%H:%M").time()
+
+
+def _carga_centro_dia(db: Session, id_centro: int, dia: date) -> Decimal:
+    valor = (
+        db.query(func.coalesce(func.sum(AlocacaoCapacidadeProducao.horas_alocadas), 0))
+        .join(AlocacaoCapacidadeProducao.ordem_operacao)
+        .join(OrdemOperacaoProducao.ordem)
+        .filter(
+            AlocacaoCapacidadeProducao.id_centro_producao == id_centro,
+            AlocacaoCapacidadeProducao.data_alocacao == dia,
+            OrdemProducao.status_ordem != "Cancelado",
+        )
+        .scalar()
+    )
+    return Decimal(str(valor or 0))
+
+
+def _alocar_operacao(
+    db: Session,
+    ordem_operacao: OrdemOperacaoProducao,
+    capacidade: CapacidadeCentroProducao,
+    inicio_minimo: datetime,
+) -> tuple[datetime, datetime]:
+    restante = Decimal(str(ordem_operacao.carga_horas))
+    limite_diario = Decimal(str(capacidade.horas_disponiveis_dia))
+    dias_uteis = _dias_capacidade(capacidade)
+    dia = inicio_minimo.date()
+    inicio_real = None
+    fim_real = None
+
+    while restante > 0:
+        if dia.weekday() not in dias_uteis:
+            dia += timedelta(days=1)
+            continue
+        base = datetime.combine(dia, _inicio_expediente(capacidade))
+        usado = _carga_centro_dia(db, ordem_operacao.id_centro_producao, dia)
+        deslocamento_minimo = Decimal("0")
+        if dia == inicio_minimo.date() and inicio_minimo > base:
+            deslocamento_minimo = Decimal(
+                str((inicio_minimo - base).total_seconds() / 3600)
+            )
+        inicio_horas = max(usado, deslocamento_minimo)
+        disponivel = limite_diario - inicio_horas
+        if disponivel <= 0:
+            dia += timedelta(days=1)
+            continue
+        alocado = min(restante, disponivel).quantize(Decimal("0.01"))
+        if alocado <= 0:
+            dia += timedelta(days=1)
+            continue
+        inicio_parcela = base + timedelta(hours=float(inicio_horas))
+        fim_parcela = inicio_parcela + timedelta(hours=float(alocado))
+        if inicio_real is None:
+            inicio_real = inicio_parcela
+        fim_real = fim_parcela
+        db.add(
+            AlocacaoCapacidadeProducao(
+                ordem_operacao=ordem_operacao,
+                id_centro_producao=ordem_operacao.id_centro_producao,
+                data_alocacao=dia,
+                horas_alocadas=alocado,
+            )
+        )
+        db.flush()
+        restante -= alocado
+        if restante > 0:
+            dia += timedelta(days=1)
+    return inicio_real, fim_real
+
+
+def _planejar_roteiro_ordem(
+    db: Session,
+    ordem: OrdemProducao,
+    roteiro: RoteiroProducao,
+    data_inicio_planejada: date | datetime,
+) -> PlanejamentoOrdemProducao:
+    if not roteiro.operacoes:
+        raise ValueError("O roteiro selecionado não possui operações.")
+    cursor = (
+        data_inicio_planejada
+        if isinstance(data_inicio_planejada, datetime)
+        else datetime.combine(data_inicio_planejada, time.min)
+    )
+    carga_total = Decimal("0.00")
+    for modelo in roteiro.operacoes:
+        capacidade = (
+            db.query(CapacidadeCentroProducao)
+            .filter(
+                CapacidadeCentroProducao.id_centro_producao
+                == modelo.id_centro_producao
+            )
+            .with_for_update()
+            .first()
+        )
+        if capacidade is None:
+            raise ValueError(f"O centro '{modelo.centro.nome}' não possui capacidade configurada.")
+        carga = (
+            Decimal(str(modelo.tempo_setup_horas))
+            + Decimal(str(modelo.tempo_unitario_horas))
+            * Decimal(str(ordem.quantidade_planejada))
+        ).quantize(Decimal("0.01"))
+        operacao = OrdemOperacaoProducao(
+            ordem=ordem,
+            id_operacao_roteiro=modelo.id_operacao_roteiro,
+            id_centro_producao=modelo.id_centro_producao,
+            sequencia=modelo.sequencia,
+            nome_operacao=modelo.nome_operacao,
+            recurso=modelo.recurso,
+            carga_horas=carga,
+            inicio_planejado=cursor,
+            fim_planejado=cursor,
+        )
+        db.add(operacao)
+        db.flush()
+        inicio, fim = _alocar_operacao(db, operacao, capacidade, cursor)
+        operacao.inicio_planejado = inicio
+        operacao.fim_planejado = fim
+        cursor = fim
+        carga_total += carga
+    planejamento = PlanejamentoOrdemProducao(
+        ordem=ordem,
+        roteiro=roteiro,
+        data_inicio_planejada=ordem.operacoes[0].inicio_planejado,
+        data_fim_planejada=ordem.operacoes[-1].fim_planejado,
+        carga_total_horas=carga_total,
+        status_planejamento="PLANEJADO",
+    )
+    db.add(planejamento)
+    return planejamento
+
+
+def consultar_carga_centros(
+    db: Session, data_inicio: date, data_fim: date
+) -> list[dict]:
+    alocacoes = db.query(AlocacaoCapacidadeProducao).filter(
+        AlocacaoCapacidadeProducao.data_alocacao >= data_inicio,
+        AlocacaoCapacidadeProducao.data_alocacao <= data_fim,
+    ).all()
+    consolidado = {}
+    for item in alocacoes:
+        if item.ordem_operacao.ordem.status_ordem == "Cancelado":
+            continue
+        chave = (item.id_centro_producao, item.data_alocacao)
+        linha = consolidado.setdefault(
+            chave,
+            {
+                "centro": item.centro.nome,
+                "data": item.data_alocacao,
+                "capacidade": Decimal(str(item.centro.capacidade.horas_disponiveis_dia)),
+                "alocado": Decimal("0.00"),
+            },
+        )
+        linha["alocado"] += Decimal(str(item.horas_alocadas))
+    for linha in consolidado.values():
+        linha["disponivel"] = linha["capacidade"] - linha["alocado"]
+        linha["ocupacao_percentual"] = (
+            linha["alocado"] / linha["capacidade"] * 100
+            if linha["capacidade"]
+            else Decimal("0")
+        )
+    return sorted(consolidado.values(), key=lambda item: (item["data"], item["centro"]))
+
+
 def _registrar_log(db: Session, tipo_operacao: str, id_referencia: int, descricao: str, id_usuario: int):
     usuario = db.get(Usuario, id_usuario)
     if usuario is None or not usuario.ativo:
@@ -159,6 +453,8 @@ def criar_ordem_producao(
     id_item_produto: int,
     quantidade_planejada: float,
     id_usuario: int = 1,
+    data_inicio_planejada: date | datetime | None = None,
+    id_roteiro: int | None = None,
 ):
     """
     Cria uma ordem de produção com status 'Criado'.
@@ -218,6 +514,19 @@ def criar_ordem_producao(
             status_reserva="RESERVADA",
         ))
 
+    roteiro = db.get(RoteiroProducao, id_roteiro) if id_roteiro else obter_roteiro_producao(
+        db, id_item_produto
+    )
+    if roteiro is not None:
+        if roteiro.id_item_produto != id_item_produto or roteiro.ativo != "S":
+            raise ValueError("O roteiro selecionado não pertence ao produto da ordem.")
+        _planejar_roteiro_ordem(
+            db,
+            nova_ordem,
+            roteiro,
+            data_inicio_planejada or date.today(),
+        )
+
     _registrar_log(
         db,
         tipo_operacao="CRIAR_ORDEM_PRODUCAO",
@@ -256,6 +565,12 @@ def iniciar_producao(db: Session, id_ordem_producao: int, id_usuario: int = 1):
 
     ordem.status_ordem = "Em Producao"
     ordem.data_inicio = datetime.utcnow()
+    if ordem.planejamento:
+        ordem.planejamento.status_planejamento = "EM_EXECUCAO"
+    if ordem.operacoes:
+        primeira = ordem.operacoes[0]
+        primeira.status_operacao = "EM_EXECUCAO"
+        primeira.inicio_real = datetime.utcnow()
 
     _registrar_log(
         db,
@@ -358,6 +673,122 @@ def registrar_perda(
         raise RuntimeError(f"Erro ao registrar perda: {e}")
 
 
+def atualizar_operacao_ordem(
+    db: Session,
+    id_ordem_operacao: int,
+    novo_status: str,
+    id_usuario: int,
+) -> OrdemOperacaoProducao:
+    status = novo_status.strip().upper()
+    if status not in {"PENDENTE", "EM_EXECUCAO", "CONCLUIDA"}:
+        raise ValueError("Status de operação inválido.")
+    operacao = db.get(OrdemOperacaoProducao, id_ordem_operacao)
+    if operacao is None:
+        raise ValueError("Operação da ordem não encontrada.")
+    if operacao.ordem.status_ordem not in {"Criado", "Em Producao"}:
+        raise ValueError("A ordem não permite alterar suas operações.")
+    if status == "EM_EXECUCAO":
+        anteriores = [
+            item
+            for item in operacao.ordem.operacoes
+            if item.sequencia < operacao.sequencia
+            and item.status_operacao != "CONCLUIDA"
+        ]
+        if anteriores:
+            raise ValueError("Conclua as operações anteriores antes de iniciar esta etapa.")
+        operacao.inicio_real = operacao.inicio_real or datetime.utcnow()
+    elif status == "CONCLUIDA":
+        if operacao.status_operacao != "EM_EXECUCAO":
+            raise ValueError("Somente uma operação em execução pode ser concluída.")
+        operacao.fim_real = datetime.utcnow()
+        proxima = next(
+            (
+                item
+                for item in operacao.ordem.operacoes
+                if item.sequencia == operacao.sequencia + 1
+            ),
+            None,
+        )
+        if proxima:
+            proxima.status_operacao = "EM_EXECUCAO"
+            proxima.inicio_real = datetime.utcnow()
+    operacao.status_operacao = status
+    _registrar_log(
+        db,
+        "ATUALIZAR_OPERACAO_ROTEIRO",
+        operacao.ordem.id_ordem_producao,
+        f"Operação '{operacao.nome_operacao}' atualizada para {status}.",
+        id_usuario,
+    )
+    db.commit()
+    db.refresh(operacao)
+    return operacao
+
+
+def registrar_inspecao_qualidade(
+    db: Session,
+    id_ordem_producao: int,
+    etapa: str,
+    resultado: str,
+    quantidade_inspecionada,
+    quantidade_aprovada,
+    quantidade_reprovada,
+    id_usuario: int,
+    observacao: str = "",
+    id_ordem_operacao: int | None = None,
+) -> InspecaoQualidade:
+    ordem = db.get(OrdemProducao, id_ordem_producao)
+    if ordem is None:
+        raise ValueError("Ordem de produção não encontrada.")
+    if ordem.status_ordem != "Em Producao":
+        raise ValueError("A inspeção só pode ser registrada durante a produção.")
+    etapa_normalizada = etapa.strip().upper()
+    resultado_normalizado = resultado.strip().upper()
+    if etapa_normalizada not in {"DURANTE", "FINAL"}:
+        raise ValueError("Etapa de inspeção inválida.")
+    if resultado_normalizado not in {"APROVADO", "REPROVADO", "CONDICIONAL"}:
+        raise ValueError("Resultado de inspeção inválido.")
+    inspecionada = Decimal(str(quantidade_inspecionada))
+    aprovada = Decimal(str(quantidade_aprovada))
+    reprovada = Decimal(str(quantidade_reprovada))
+    if inspecionada <= 0 or aprovada < 0 or reprovada < 0:
+        raise ValueError("As quantidades da inspeção são inválidas.")
+    if aprovada + reprovada != inspecionada:
+        raise ValueError(
+            "A soma aprovada e reprovada deve igualar a quantidade inspecionada."
+        )
+    if resultado_normalizado == "APROVADO" and reprovada > 0:
+        raise ValueError("Uma inspeção aprovada não pode possuir itens reprovados.")
+    if id_ordem_operacao:
+        operacao = db.get(OrdemOperacaoProducao, id_ordem_operacao)
+        if operacao is None or operacao.id_ordem_producao != id_ordem_producao:
+            raise ValueError("A operação informada não pertence à ordem.")
+
+    inspecao = InspecaoQualidade(
+        id_ordem_producao=id_ordem_producao,
+        id_ordem_operacao=id_ordem_operacao,
+        etapa=etapa_normalizada,
+        resultado=resultado_normalizado,
+        quantidade_inspecionada=inspecionada,
+        quantidade_aprovada=aprovada,
+        quantidade_reprovada=reprovada,
+        observacao=observacao.strip() or None,
+        id_usuario=id_usuario,
+    )
+    db.add(inspecao)
+    db.flush()
+    _registrar_log(
+        db,
+        "REGISTRAR_INSPECAO_QUALIDADE",
+        id_ordem_producao,
+        f"Inspeção {etapa_normalizada}: {resultado_normalizado}.",
+        id_usuario,
+    )
+    db.commit()
+    db.refresh(inspecao)
+    return inspecao
+
+
 def finalizar_producao(
     db: Session,
     id_ordem_producao: int,
@@ -387,6 +818,20 @@ def finalizar_producao(
 
     if not ordem.consumos:
         raise ValueError("Não há consumos registrados para finalizar a produção.")
+
+    if ordem.planejamento:
+        aprovacao_final = next(
+            (
+                item
+                for item in ordem.inspecoes_qualidade
+                if item.etapa == "FINAL" and item.resultado == "APROVADO"
+            ),
+            None,
+        )
+        if aprovacao_final is None:
+            raise ValueError(
+                "A ordem possui roteiro e exige uma inspeção final aprovada antes da finalização."
+            )
 
     try:
         consumo_por_insumo = {}
@@ -421,6 +866,12 @@ def finalizar_producao(
         ordem.quantidade_produzida = quantidade_produzida
         ordem.status_ordem = "Finalizado"
         ordem.data_finalizacao = datetime.utcnow()
+        if ordem.planejamento:
+            ordem.planejamento.status_planejamento = "CONCLUIDO"
+        for operacao in ordem.operacoes:
+            operacao.status_operacao = "CONCLUIDA"
+            operacao.inicio_real = operacao.inicio_real or ordem.data_inicio
+            operacao.fim_real = operacao.fim_real or datetime.utcnow()
 
         _registrar_log(
             db,
@@ -457,6 +908,11 @@ def cancelar_ordem_producao(
 
     try:
         ordem.status_ordem = "Cancelado"
+        if ordem.planejamento:
+            ordem.planejamento.status_planejamento = "CANCELADO"
+        for operacao in ordem.operacoes:
+            if operacao.status_operacao != "CONCLUIDA":
+                operacao.status_operacao = "CANCELADA"
         for reserva in ordem.reservas:
             if reserva.status_reserva == "RESERVADA":
                 reserva.status_reserva = "LIBERADA"
