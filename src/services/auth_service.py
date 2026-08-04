@@ -106,7 +106,23 @@ def sincronizar_usuario_google(
 
     usuario = db.query(Usuario).filter(Usuario.google_sub == google_sub).first()
     if usuario is None:
-        usuario = db.query(Usuario).filter(Usuario.email == email).first()
+        if admin_emails and email in admin_emails:
+            perfil_admin = db.query(Perfil).filter(Perfil.nome == "Administrador").first()
+            
+            usuario = Usuario(
+                google_sub=google_sub,
+                email=email,
+                nome=nome,
+                foto_url=foto_url,
+                ativo=True,
+                id_perfil=perfil_admin.id_perfil
+            )
+            db.add(usuario)
+            db.flush()
+        else:
+            raise PermissionError(
+                f"O e-mail '{email}' não está autorizado a acessar o sistema. Solicite um convite ao administrador."
+            )
 
     if usuario is None:
         raise PermissionError(
