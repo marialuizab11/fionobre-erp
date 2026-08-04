@@ -1,20 +1,61 @@
 from datetime import datetime
+from decimal import Decimal
 from sqlalchemy.orm import Session
-from src.database.models.compras import PedidoCompra, ItemCompra
-from src.database.models.log_operacao import LogOperacao
+from src.database.models.compras import Fornecedor, ItemCompra, NecessidadeCompra, PedidoCompra
+from src.database.models.usuarios import Usuario
+from src.services.auth_service import registrar_log
 from src.services.estoque_service import entrada_estoque, estornar_estoque
 from src.services.financeiro_service import gerar_conta_pagar, cancelar_lancamentos_pedido_compra
 
 
+def criar_fornecedor(db: Session, razao_social: str, cnpj_cpf: str, id_usuario: int, **dados):
+    razao_social = razao_social.strip()
+    cnpj_cpf = cnpj_cpf.strip()
+    if not razao_social or not cnpj_cpf:
+        raise ValueError("Razão social e CPF/CNPJ são obrigatórios.")
+    if db.query(Fornecedor).filter(Fornecedor.cnpj_cpf == cnpj_cpf).first():
+        raise ValueError("Já existe um fornecedor com este CPF/CNPJ.")
+
+    try:
+        fornecedor = Fornecedor(
+            razao_social=razao_social,
+            cnpj_cpf=cnpj_cpf,
+            email=(dados.get("email") or "").strip() or None,
+            telefone=(dados.get("telefone") or "").strip() or None,
+            cep=(dados.get("cep") or "").strip() or None,
+            rua=(dados.get("rua") or "").strip() or None,
+            numero=(dados.get("numero") or "").strip() or None,
+            bairro=(dados.get("bairro") or "").strip() or None,
+            cidade=(dados.get("cidade") or "").strip() or None,
+            uf=(dados.get("uf") or "").strip().upper() or None,
+        )
+        db.add(fornecedor)
+        db.flush()
+        _registrar_log(
+            db, "CRIAR_FORNECEDOR", fornecedor.id_fornecedor,
+            f"Fornecedor '{fornecedor.razao_social}' cadastrado.", id_usuario,
+        )
+        db.commit()
+        db.refresh(fornecedor)
+        return fornecedor
+    except Exception:
+        db.rollback()
+        raise
+
+
 def _registrar_log(db: Session, tipo_operacao: str, id_referencia: int, descricao: str, id_usuario: int):
-    log = LogOperacao(
-        tipo_operacao=tipo_operacao,
-        origem="compra",
-        id_referencia=id_referencia,
-        descricao=descricao,
-        id_usuario=id_usuario,
+    usuario = db.get(Usuario, id_usuario)
+    if usuario is None or not usuario.ativo:
+        raise PermissionError("Usuário responsável pela operação é inválido ou está inativo.")
+    registrar_log(
+        db,
+        usuario,
+        modulo="COMPRAS",
+        acao=tipo_operacao,
+        entidade="PedidoCompra",
+        id_registro=id_referencia,
+        detalhes={"descricao": descricao},
     )
-    db.add(log)
 
 
 def criar_pedido_compra(
@@ -22,6 +63,7 @@ def criar_pedido_compra(
     id_fornecedor: int,
     itens: list,
     id_usuario: int = 1,
+    confirmar_transacao: bool = True,
 ):
     """
     Cria um pedido de compra com status 'Criado'.
@@ -34,17 +76,21 @@ def criar_pedido_compra(
         id_fornecedor=id_fornecedor,
         id_usuario=id_usuario,
         status_compra="Criado",
-        valor_total_pedido=0.00,
+        valor_total_pedido=Decimal("0.00"),
     )
 
     db.add(novo_pedido)
     db.flush()
 
-    valor_total = 0.00
+    valor_total = Decimal("0.00")
 
     for linha in itens:
-        qtd = linha["quantidade"]
-        custo = linha["custo_unitario"]
+        qtd = Decimal(str(linha["quantidade"]))
+        custo = Decimal(str(linha["custo_unitario"]))
+        if qtd <= 0:
+            raise ValueError("A quantidade comprada deve ser maior que zero.")
+        if custo < 0:
+            raise ValueError("O custo unitário não pode ser negativo.")
         subtotal = qtd * custo
         valor_total += subtotal
 
@@ -66,12 +112,118 @@ def criar_pedido_compra(
     )
 
     try:
+        if not confirmar_transacao:
+            db.flush()
+            return novo_pedido
         db.commit()
         db.refresh(novo_pedido)
         return novo_pedido
     except Exception as e:
         db.rollback()
         raise RuntimeError(f"Erro ao criar pedido de compra: {e}")
+
+
+def gerar_necessidades_compra(
+    db: Session,
+    id_item_produto: int,
+    necessidades: list,
+    id_usuario: int,
+):
+    faltantes = [
+        item for item in necessidades
+        if Decimal(str(item["quantidade_faltante"])) > 0
+    ]
+    if not faltantes:
+        raise ValueError("Não existem materiais faltantes para gerar necessidades de compra.")
+
+    try:
+        registros = []
+        for item in faltantes:
+            id_item = int(item["id_item"])
+            registro = db.query(NecessidadeCompra).filter(
+                NecessidadeCompra.id_item == id_item,
+                NecessidadeCompra.id_item_produto == id_item_produto,
+                NecessidadeCompra.status_necessidade.in_(["PENDENTE", "EM_COMPRA"]),
+            ).first()
+            if registro is None:
+                registro = NecessidadeCompra(
+                    id_item=id_item,
+                    id_item_produto=id_item_produto,
+                    id_usuario=id_usuario,
+                    origem="PCP",
+                    status_necessidade="PENDENTE",
+                )
+                db.add(registro)
+            elif registro.status_necessidade == "EM_COMPRA":
+                registros.append(registro)
+                continue
+
+            registro.quantidade_necessaria = Decimal(str(item["quantidade_necessaria"]))
+            registro.saldo_disponivel = Decimal(str(item["saldo_disponivel"]))
+            registro.quantidade_faltante = Decimal(str(item["quantidade_faltante"]))
+            registro.id_usuario = id_usuario
+            registros.append(registro)
+
+        db.flush()
+        _registrar_log(
+            db,
+            "GERAR_NECESSIDADE_COMPRA",
+            registros[0].id_necessidade,
+            f"{len(registros)} necessidade(s) de compra gerada(s) pelo PCP.",
+            id_usuario,
+        )
+        db.commit()
+        return registros
+    except Exception:
+        db.rollback()
+        raise
+
+
+def criar_pedido_por_necessidades(
+    db: Session,
+    id_fornecedor: int,
+    ids_necessidades: list,
+    custos_unitarios: dict,
+    id_usuario: int,
+):
+    if not ids_necessidades:
+        raise ValueError("Selecione pelo menos uma necessidade de compra.")
+    necessidades = db.query(NecessidadeCompra).filter(
+        NecessidadeCompra.id_necessidade.in_(ids_necessidades)
+    ).all()
+    if len(necessidades) != len(set(ids_necessidades)):
+        raise ValueError("Uma ou mais necessidades não foram encontradas.")
+    if any(item.status_necessidade != "PENDENTE" for item in necessidades):
+        raise ValueError("Somente necessidades pendentes podem virar pedido de compra.")
+
+    try:
+        itens_por_id = {}
+        for necessidade in necessidades:
+            custo = Decimal(str(custos_unitarios.get(necessidade.id_item, 0)))
+            if custo < 0:
+                raise ValueError("O custo unitário não pode ser negativo.")
+            linha = itens_por_id.setdefault(
+                necessidade.id_item,
+                {"id_item": necessidade.id_item, "quantidade": Decimal("0"), "custo_unitario": custo},
+            )
+            linha["quantidade"] += Decimal(str(necessidade.quantidade_faltante))
+
+        pedido = criar_pedido_compra(
+            db,
+            id_fornecedor,
+            list(itens_por_id.values()),
+            id_usuario,
+            confirmar_transacao=False,
+        )
+        for necessidade in necessidades:
+            necessidade.id_pedido_compra = pedido.id_pedido_compra
+            necessidade.status_necessidade = "EM_COMPRA"
+        db.commit()
+        db.refresh(pedido)
+        return pedido
+    except Exception:
+        db.rollback()
+        raise
 
 
 def confirmar_compra(db: Session, id_pedido_compra: int, id_usuario: int = 1):
@@ -155,6 +307,9 @@ def receber_compra(
             data_vencimento=data_vencimento,
         )
 
+        for necessidade in pedido.necessidades:
+            necessidade.status_necessidade = "ATENDIDA"
+
         _registrar_log(
             db,
             tipo_operacao="RECEBER_COMPRA",
@@ -210,6 +365,9 @@ def cancelar_compra(
         pedido.status_compra = "Cancelado"
         pedido.justificativa_cancelamento = justificativa.strip()
         cancelar_lancamentos_pedido_compra(db, id_pedido_compra)
+        for necessidade in pedido.necessidades:
+            necessidade.status_necessidade = "PENDENTE"
+            necessidade.id_pedido_compra = None
 
         _registrar_log(
             db,

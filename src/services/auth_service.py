@@ -9,7 +9,10 @@ from src.database.models.usuarios import LogOperacao, Perfil, Permissao, Usuario
 
 
 PERMISSOES_PADRAO = {
+    "cadastros.gerenciar": "Cadastrar clientes e itens",
     "estoque.visualizar": "Visualizar saldos e movimentações de estoque",
+    "compras.gerenciar": "Cadastrar fornecedores e gerenciar pedidos de compra",
+    "producao.gerenciar": "Cadastrar centros e gerenciar ordens de produção",
     "vendas.gerenciar": "Criar e alterar pedidos de venda",
     "logistica.gerenciar": "Criar entregas e atualizar seu status",
     "usuarios.gerenciar": "Alterar perfis e situação dos usuários",
@@ -19,7 +22,10 @@ PERMISSOES_PADRAO = {
 PERFIS_PADRAO = {
     "Administrador": set(PERMISSOES_PADRAO),
     "Operacional": {
+        "cadastros.gerenciar",
         "estoque.visualizar",
+        "compras.gerenciar",
+        "producao.gerenciar",
         "vendas.gerenciar",
         "logistica.gerenciar",
     },
