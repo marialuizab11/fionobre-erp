@@ -19,6 +19,7 @@ from src.services.financeiro_service import (
     listar_lancamentos_para_conciliacao,
     registrar_movimento_extrato,
 )
+from src.services.usuario_service import cadastrar_usuario
 
 
 def claims_google(sub: str, email: str) -> dict:
@@ -143,6 +144,12 @@ class FinanceiroServiceTest(unittest.TestCase):
         )
 
     def test_visualizador_nao_pode_criar_lancamento_manual(self):
+        cadastrar_usuario(
+            self.db,
+            self.admin,
+            "viewer-financeiro@example.com",
+            "Visualizador",
+        )
         usuario = sincronizar_usuario_google(
             self.db, claims_google("financeiro-viewer", "viewer-financeiro@example.com")
         )
