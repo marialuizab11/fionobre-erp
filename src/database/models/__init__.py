@@ -12,7 +12,11 @@ from src.database.models.producao import (
 )
 from src.database.models.logistica import Entrega
 from src.database.models.core import MovimentacaoEstoque
-from src.database.models.financeiro import LancamentoFinanceiro
+from src.database.models.financeiro import (
+    DetalheLancamentoFinanceiro,
+    LancamentoFinanceiro,
+    MovimentoExtratoBancario,
+)
 from src.database.models.usuarios import LogOperacao, Perfil, Permissao, Usuario
 
 __all__ = [
@@ -34,6 +38,8 @@ __all__ = [
     "Entrega",
     "MovimentacaoEstoque",
     "LancamentoFinanceiro",
+    "DetalheLancamentoFinanceiro",
+    "MovimentoExtratoBancario",
     "Usuario",
     "Perfil",
     "Permissao",

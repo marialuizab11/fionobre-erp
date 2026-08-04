@@ -5,17 +5,23 @@ import streamlit as st
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+from src.database.connection import init_db
 from src.views.admin_view import render_admin
 from src.views.auth_view import exigir_login_google, render_usuario_sidebar
 from src.views.cadastros_view import render_cadastros
 from src.views.components.ui_components import aplicar_estilo_global
-from src.views.contas_receber_view import render_contas_receber
 from src.views.compras_view import render_compras
 from src.views.estoque_view import render_estoque
+from src.views.financeiro_view import render_financeiro
 from src.views.gestao_vendas_view import render_gestao_vendas
 from src.views.logistica_view import render_logistica
 from src.views.producao_view import render_producao
 from src.views.vendas_view import render_vendas
+
+
+@st.cache_resource
+def preparar_banco():
+    init_db()
 
 
 def main():
@@ -25,6 +31,7 @@ def main():
         layout="wide",
     )
     aplicar_estilo_global()
+    preparar_banco()
     usuario_atual = exigir_login_google()
 
     st.sidebar.image(
@@ -45,7 +52,8 @@ def main():
     if usuario_atual.pode("vendas.gerenciar"):
         rotas_possiveis["Pedidos de Venda"] = lambda: render_vendas(usuario_atual)
         rotas_possiveis["Gestao de Vendas"] = render_gestao_vendas
-        rotas_possiveis["Contas a Receber"] = render_contas_receber
+    if usuario_atual.pode("financeiro.gerenciar"):
+        rotas_possiveis["Financeiro"] = lambda: render_financeiro(usuario_atual)
     if usuario_atual.pode("logistica.gerenciar"):
         rotas_possiveis["Gestao Logistica"] = render_logistica
     if usuario_atual.pode("usuarios.gerenciar") or usuario_atual.pode("auditoria.visualizar"):
