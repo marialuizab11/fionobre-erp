@@ -278,36 +278,42 @@ def seed_database(database_url):
             pc.valor_total_pedido = total
         session.flush()
 
-        status_vendas = ['Criado', 'Confirmado', 'Concluido', 'Cancelado']
+        status_vendas = ['Orcamento', 'Criado', 'Confirmado', 'Concluido', 'Cancelado']
         status_entregas = ['Pendente', 'Em separação', 'Enviado', 'Entregue']
-        
-        for _ in range(25):
+
+        for _ in range(120):
             status_v = random.choice(status_vendas)
-            dt_venda = fake.date_time_between(start_date=datetime.utcnow() - timedelta(days=90), end_date=datetime.utcnow())
-            
-            entrega = Entrega(
-                data_previsao=dt_venda + timedelta(days=5),
-                status_logistica=random.choice(status_entregas),
-                valor_frete=round(random.uniform(15.00, 100.00), 2),
-                data_expedicao=dt_venda + timedelta(days=1),
-                data_entrega_realizada=dt_venda + timedelta(days=4) if status_v == 'Concluido' else None
+            dt_venda = fake.date_time_between(
+                start_date=datetime(2024, 1, 1),
+                end_date=datetime(2026, 8, 1),
             )
-            session.add(entrega)
-            session.flush()
-            
-            session.add(EntregaStatusHistorico(
-                id_entrega=entrega.id_entrega,
-                id_usuario=admin_user.id_usuario,
-                nome_usuario=admin_user.nome,
-                status_anterior='Pendente',
-                status_novo=entrega.status_logistica,
-                data_hora=dt_venda
-            ))
+
+            id_entrega = None
+            if status_v != 'Orcamento':
+                entrega = Entrega(
+                    data_previsao=dt_venda + timedelta(days=5),
+                    status_logistica=random.choice(status_entregas),
+                    valor_frete=round(random.uniform(15.00, 100.00), 2),
+                    data_expedicao=dt_venda + timedelta(days=1),
+                    data_entrega_realizada=dt_venda + timedelta(days=4) if status_v == 'Concluido' else None
+                )
+                session.add(entrega)
+                session.flush()
+                id_entrega = entrega.id_entrega
+
+                session.add(EntregaStatusHistorico(
+                    id_entrega=entrega.id_entrega,
+                    id_usuario=admin_user.id_usuario,
+                    nome_usuario=admin_user.nome,
+                    status_anterior='Pendente',
+                    status_novo=entrega.status_logistica,
+                    data_hora=dt_venda
+                ))
 
             pv = PedidoVenda(
                 id_cliente=random.choice(clientes).id_cliente,
                 id_usuario=random.choice(todos_usuarios).id_usuario,
-                id_entrega=entrega.id_entrega,
+                id_entrega=id_entrega,
                 status_venda=status_v,
                 valor_total_pedido=0,
                 data_venda=dt_venda
@@ -326,7 +332,7 @@ def seed_database(database_url):
             total_venda = 0
             qtd_produtos = random.randint(1, min(3, len(produtos_acabados)))
             produtos_escolhidos = random.sample(produtos_acabados, k=qtd_produtos)
-            
+
             for prod in produtos_escolhidos:
                 qtd = random.randint(2, 20)
                 v_unit = prod.preco_venda or 50.00
@@ -341,16 +347,17 @@ def seed_database(database_url):
             pv.valor_total_pedido = total_venda
             session.flush()
 
-            lf_receber = LancamentoFinanceiro(
-                id_pedido_venda=pv.id_pedido_venda,
-                valor=total_venda,
-                data_vencimento=dt_venda + timedelta(days=30),
-                tipo_lancamento='CONTA_A_RECEBER',
-                origem_lancamento='VENDA',
-                status_pagamento='Pago' if status_v == 'Concluido' else 'Pendente',
-                data_pagamento=dt_venda + timedelta(days=10) if status_v == 'Concluido' else None
-            )
-            session.add(lf_receber)
+            if status_v != 'Orcamento':
+                lf_receber = LancamentoFinanceiro(
+                    id_pedido_venda=pv.id_pedido_venda,
+                    valor=total_venda,
+                    data_vencimento=dt_venda + timedelta(days=30),
+                    tipo_lancamento='CONTA_A_RECEBER',
+                    origem_lancamento='VENDA',
+                    status_pagamento='Pago' if status_v == 'Concluido' else 'Pendente',
+                    data_pagamento=dt_venda + timedelta(days=10) if status_v == 'Concluido' else None
+                )
+                session.add(lf_receber)
 
         for pc in pedidos_compra:
             if pc.status_compra == 'Recebido':

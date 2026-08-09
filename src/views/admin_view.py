@@ -17,7 +17,7 @@ from src.services.usuario_service import (
     listar_permissoes,
     listar_usuarios,
 )
-from src.views.components.ui_components import render_cabecalho
+from src.views.components.ui_components import render_cabecalho, render_dataframe_padrao
 
 
 def _recarregar_contexto_usuario() -> None:
@@ -61,7 +61,7 @@ def _render_usuarios(usuario_atual) -> None:
         usuarios = listar_usuarios(db, usuario_atual)
         perfis = listar_perfis(db, usuario_atual)
 
-        st.dataframe(
+        render_dataframe_padrao(
             [
                 {
                     "ID": usuario.id_usuario,
@@ -72,9 +72,7 @@ def _render_usuarios(usuario_atual) -> None:
                     "Último login": usuario.ultimo_login_em,
                 }
                 for usuario in usuarios
-            ],
-            width="stretch",
-            hide_index=True,
+            ]
         )
 
         if not usuarios:
@@ -347,7 +345,7 @@ def _render_auditoria(usuario_atual) -> None:
     try:
         logs = listar_logs(db, usuario_atual, limite=200)
         st.caption("Últimas 200 operações registradas")
-        st.dataframe(
+        render_dataframe_padrao(
             [
                 {
                     "Data/hora": log.data_hora,
@@ -359,9 +357,7 @@ def _render_auditoria(usuario_atual) -> None:
                     "Detalhes": log.detalhes,
                 }
                 for log in logs
-            ],
-            width="stretch",
-            hide_index=True,
+            ]
         )
     except Exception as erro:
         st.error(f"Erro ao consultar auditoria: {erro}")
