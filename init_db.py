@@ -1,3 +1,4 @@
+import src.database.models  # noqa: F401 — registra tabelas no metadata
 from src.database.connection import SessionLocal, init_db
 from src.services.auth_service import garantir_perfis_padrao
 

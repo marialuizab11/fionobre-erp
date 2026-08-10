@@ -1,168 +1,167 @@
-# 🏭 FioNobre ERP - Sistema de Gestão Industrial
+# FioNobre ERP - Sistema de Gestão Industrial
 
-Este projeto consiste no desenvolvimento de um **ERP simplificado** focado na integração operacional, persistência de dados e suporte à decisão, desenvolvido como parte da disciplina de **Sistemas de Informação e Tecnologias (2026.1)**.
+ERP acadêmico focado na integração operacional, persistência de dados e apoio à decisão, desenvolvido na disciplina de **Sistemas de Informação e Tecnologias (2026.1)**.
 
 ---
 
-# 🏗️ Arquitetura do Sistema
+## Arquitetura
 
-O sistema foi estruturado seguindo o princípio de **separação de responsabilidades**, garantindo que a lógica de negócio, a persistência de dados e a interface visual sejam modulares e facilmente manteníveis.
-
-## 📂 Estrutura de Pastas
+O sistema segue separação de responsabilidades entre configuração, persistência, regras de negócio e interface Streamlit.
 
 ```text
 fionobre-erp/
-├── config/              # Configurações globais e carregamento de variáveis de ambiente
+├── config/                 # Variáveis de ambiente e DATABASE_URL
+├── scripts/
+│   └── seed_db.py          # Seed operacional / dados para BI
 ├── src/
-│   ├── database/        # Camada de Dados: Mapeamento ORM e conexão com PostgreSQL
-│   ├── services/        # Regras de Negócio: Lógica de faturamento, estoque e fluxos
-│   └── views/           # Interface (UI): Telas e menus construídos em Streamlit
-├── app.py               # Ponto de entrada do sistema
-├── .env.example         # Template de configuração de ambiente
-├── requirements.txt     # Dependências do projeto
-└── README.md            # Documentação do projeto
+│   ├── database/           # ORM SQLAlchemy + conexão PostgreSQL
+│   ├── services/           # Regras de negócio
+│   └── views/              # Telas Streamlit e componentes de UI
+├── .streamlit/             # Tema e secrets OIDC (exemplo versionado)
+├── tests/                  # Testes automatizados
+├── app.py                  # Entrada da aplicação
+├── init_db.py              # Cria tabelas e perfis padrão
+├── .env.example            # Modelo de credenciais (sem segredos reais)
+├── requirements.txt
+└── README.md
 ```
 
-## 📋 Responsabilidades
+### Módulos da interface
 
-### 📁 `database/`
+| Menu | Função |
+|------|--------|
+| Controle de Estoque | Saldos, localizações, ajustes e transferências |
+| Pedidos de Venda | Carrinho, orçamento ou confirmação com faturamento/logística |
+| Gestão de Vendas | Histórico, conversão de orçamento e cancelamento |
+| Contas a Receber | Baixa de pagamentos e acompanhamento financeiro |
+| Gestão Logística | Entregas, rotas, rastreio e comprovantes |
+| Administração | Usuários, perfis e auditoria (conforme permissões) |
 
-Contém o modelo de dados completo do projeto (MER) traduzido para código. É responsável pela persistência das informações e pela integridade das operações realizadas no sistema.
+### Ciclo do pedido / orçamento
 
-### ⚙️ `services/`
+```text
+Orcamento  →  Confirmado  →  Concluído
+     │              │
+     └──── Cancelado ┘
+```
 
-Representa o **cérebro do ERP**. Toda a lógica de negócio é implementada nesta camada, incluindo processos integrados, como:
-
-- Baixa automática de estoque após uma venda;
-- Processamento de faturamento;
-- Validação de regras de negócio;
-- Fluxos operacionais do sistema.
-
-### 🖥️ `views/`
-
-Camada de apresentação da aplicação. Responsável por:
-
-- Capturar os dados inseridos pelo usuário;
-- Exibir informações e resultados;
-- Construir toda a interface utilizando **Streamlit**.
-
----
-
-# 🚀 Como rodar o sistema
-
-## 1️⃣ Pré-requisitos
-
-Antes de iniciar, certifique-se de possuir:
-
-- Python **3.11** ou superior;
-- PostgreSQL instalado e em execução;
-- Um banco de dados criado (exemplo: `fio_nobre_db`).
+- **Orçamento:** não baixa estoque e não gera financeiro/logística.
+- **Confirmado:** baixa estoque e segue o fluxo operacional.
+- **Cancelamento:** permitido enquanto não houver pagamento `Pago` e a logística não estiver `Enviado`/`Entregue`.
 
 ---
 
-## 2️⃣ Instalação das dependências
+## Como rodar o sistema
 
-Na raiz do projeto, execute:
+### 1. Pré-requisitos
+
+- Python **3.11** ou superior
+- PostgreSQL em execução
+- Banco criado (exemplo: `fionobre_db`)
+- Cliente OAuth Google (login Streamlit)
+
+### 2. Instalação das dependências
 
 ```bash
+python -m venv .venv
+
+# Windows (PowerShell)
+.\.venv\Scripts\Activate.ps1
+
+# Linux / macOS
+source .venv/bin/activate
+
 pip install -r requirements.txt
 ```
 
----
-
-## 3️⃣ Configuração das variáveis de ambiente
-
-O projeto utiliza um arquivo `.env` para armazenar as credenciais do banco de dados.
-
-Primeiro, copie o arquivo de exemplo:
+### 3. Variáveis de ambiente
 
 ```bash
+# Windows
+copy .env.example .env
+
+# Linux / macOS
 cp .env.example .env
 ```
 
-Depois, edite o arquivo `.env` preenchendo as informações do seu banco:
+Edite o `.env`:
 
 ```env
-DB_USER=seu_usuario
+DB_USER=postgres
 DB_PASSWORD=sua_senha
 DB_HOST=localhost
 DB_PORT=5432
-DB_NAME=fio_nobre_db
+DB_NAME=fionobre_db
 ADMIN_EMAILS=seu_email@gmail.com
 ```
 
-## Login com Google
+> O arquivo `.env` **não** deve ser versionado.
 
-O acesso utiliza OpenID Connect (OIDC) nativo do Streamlit. No Google Cloud,
-crie um cliente OAuth do tipo **Aplicativo da Web** e cadastre esta URI de
-redirecionamento para desenvolvimento local:
+### 4. Login com Google
+
+No Google Cloud, crie um cliente OAuth **Aplicativo da Web** com a URI:
 
 ```text
 http://localhost:8501/oauth2callback
 ```
 
-Depois, copie `.streamlit/secrets.toml.example` para
-`.streamlit/secrets.toml` e preencha `client_id`, `client_secret` e uma
-`cookie_secret` longa e aleatória. O arquivo real de segredos é ignorado pelo
-Git e nunca deve ser versionado.
-
-Contas novas recebem o perfil `Visualizador`. Os e-mails informados em
-`ADMIN_EMAILS`, separados por vírgula, recebem o perfil `Administrador`.
-
----
-
-## 4️⃣ Inicialização do banco de dados
-
-Na primeira execução, crie as tabelas do banco executando:
+Depois:
 
 ```bash
-python init_db.py
+copy .streamlit\secrets.toml.example .streamlit\secrets.toml
 ```
 
----
+Preencha `client_id`, `client_secret` e uma `cookie_secret` longa. Contas novas recebem perfil `Visualizador`; e-mails em `ADMIN_EMAILS` recebem `Administrador`.
 
-## 5️⃣ Executando o ERP
+### 5. Banco de dados
 
-Inicie a aplicação com o Streamlit:
+```bash
+# Cria tabelas e perfis padrão
+python init_db.py
+
+# Popula massa de dados para demonstração / BI
+python scripts/seed_db.py
+```
+
+> Atenção: `scripts/seed_db.py` recria o schema (`DROP SCHEMA`) antes de popular.
+
+### 6. Executar o ERP
 
 ```bash
 streamlit run app.py
 ```
 
-Após a execução, o sistema estará disponível no navegador.
+Abra `http://localhost:8501`.
 
 ---
 
-# 👨‍💻 Tecnologias Utilizadas
+## Tecnologias
 
 - Python
-- Streamlit
+- Streamlit (`streamlit[auth]`)
 - PostgreSQL
 - SQLAlchemy (ORM)
 - Python-dotenv
-- Git e GitHub
+- Faker (seed)
 
 ---
 
-# 🔒 Boas práticas
+## Boas práticas
 
-> **Importante:** O arquivo `.env` está listado no `.gitignore` para impedir o compartilhamento de informações sensíveis.
-
-**Nunca envie seu arquivo `.env` para o GitHub**, pois ele contém credenciais do banco de dados.
-
-Utilize apenas o arquivo **`.env.example`** para servir como modelo de configuração.
+- Nunca commitir `.env` nem `.streamlit/secrets.toml`
+- Credenciais só em variáveis de ambiente / secrets locais
+- Justificativa obrigatória (≥ 5 caracteres) no cancelamento
 
 ---
 
-# 👥 Desenvolvedores
+## Desenvolvedores
 
 Projeto desenvolvido por:
-* [@Maria Luiza Bezerra dos Santos](https://github.com/marialuizab11)
-* [@Matheus Cavalcante](https://github.com/Matheuuscavufape)
-* [@João Vitor](https://github.com/jvdss3)
 
----
+- [@Maria Luiza Bezerra dos Santos](https://github.com/marialuizab11)
+- [@Matheus Cavalcante](https://github.com/Matheuuscavufape)
+- [@João Vitor](https://github.com/jvdss3)
 
-## 📄 Licença
+## Licença
 
-Este projeto foi desenvolvido para fins acadêmicos na disciplina de **Sistemas de Informação e Tecnologias (2026.1)**.
+Uso acadêmico na disciplina **Sistemas de Informação e Tecnologias (2026.1)**.

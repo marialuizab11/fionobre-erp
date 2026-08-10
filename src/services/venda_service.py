@@ -1,7 +1,8 @@
 from datetime import datetime, time
 from decimal import Decimal
 
-from sqlalchemy.orm import Session
+from sqlalchemy import String, cast, or_
+from sqlalchemy.orm import Session, joinedload
 
 from src.database.models.cadastros import Cliente
 from src.database.models.financeiro import LancamentoFinanceiro
@@ -116,6 +117,19 @@ def cancelar_venda(
     if not justificativa or len(justificativa.strip()) < 5:
         raise ValueError("É obrigatório fornecer uma justificativa válida para o cancelamento.")
 
+    pagamento_pago = (
+        db.query(LancamentoFinanceiro)
+        .filter(
+            LancamentoFinanceiro.id_pedido_venda == id_pedido,
+            LancamentoFinanceiro.status_pagamento == "Pago",
+        )
+        .first()
+    )
+    if pagamento_pago:
+        raise ValueError(
+            "Não é possível cancelar: já existe pagamento registrado (status Pago)."
+        )
+
     entrega = None
     if pedido.id_entrega:
         entrega = db.query(Entrega).filter(Entrega.id_entrega == pedido.id_entrega).first()
@@ -134,15 +148,17 @@ def cancelar_venda(
         justificativa=justificativa,
     ))
 
-    itens_vendidos = db.query(ItemVenda).filter(ItemVenda.id_pedido_venda == id_pedido).all()
-    for item in itens_vendidos:
-        estornar_estoque(
-            db,
-            item.id_item,
-            item.quantidade_vendida,
-            usuario.id_usuario,
-            confirmar_transacao=False,
-        )
+    # Orçamento não baixa estoque; só estorna pedidos já confirmados.
+    if status_antigo != "Orcamento":
+        itens_vendidos = db.query(ItemVenda).filter(ItemVenda.id_pedido_venda == id_pedido).all()
+        for item in itens_vendidos:
+            estornar_estoque(
+                db,
+                item.id_item,
+                item.quantidade_vendida,
+                usuario.id_usuario,
+                confirmar_transacao=False,
+            )
 
     if entrega:
         entrega.status_logistica = "Falha"
@@ -166,18 +182,33 @@ def listar_pedidos(
     db: Session,
     status: str = None,
     data_inicio: datetime = None,
-    data_fim: datetime = None
+    data_fim: datetime = None,
+    busca: str = None,
 ):
-    query = db.query(PedidoVenda)
-    
+    query = db.query(PedidoVenda).options(
+        joinedload(PedidoVenda.cliente),
+        joinedload(PedidoVenda.entrega),
+        joinedload(PedidoVenda.lancamentos),
+    )
+
     if status and str(status).strip() and str(status).strip() != "None":
         query = query.filter(PedidoVenda.status_venda == status)
-        
+
     if data_inicio:
         query = query.filter(PedidoVenda.data_venda >= datetime.combine(data_inicio, time.min))
     if data_fim:
         query = query.filter(PedidoVenda.data_venda <= datetime.combine(data_fim, time.max))
-    
+
+    if busca and busca.strip():
+        termo = f"%{busca.strip()}%"
+        query = query.outerjoin(Cliente).filter(
+            or_(
+                cast(PedidoVenda.id_pedido_venda, String).ilike(termo),
+                Cliente.razao_social.ilike(termo),
+                Cliente.cnpj_cpf.ilike(termo),
+            )
+        )
+
     resultado = query.order_by(PedidoVenda.data_venda.desc()).all()
     return resultado if resultado is not None else []
 
