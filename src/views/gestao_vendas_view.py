@@ -14,7 +14,11 @@ from src.services.venda_service import (
 )
 from src.services.logistica_service import listar_historico_entrega
 from src.views.components.ui_components import render_cabecalho
-
+from src.services.dashboard_venda_service import (
+    obter_kpis_comerciais,
+    obter_faturamento_por_periodo,
+    obter_top_5_produtos
+)
 
 @st.dialog("Emissão de Fatura / Comprovante de Venda", width="large")
 def modal_emitir_fatura(pedido_id):
@@ -26,7 +30,7 @@ def modal_emitir_fatura(pedido_id):
             return
 
         cliente = pedido.cliente
-        st.markdown(f"## 📄 FATURA DE VENDA Nº #{pedido.id_pedido_venda:06d}")
+        st.markdown(f"## FATURA DE VENDA Nº #{pedido.id_pedido_venda:06d}")
         st.caption(f"Emissão: {datetime.now().strftime('%d/%m/%Y %H:%M')}")
         st.divider()
 
@@ -169,7 +173,7 @@ def modal_historico_pedido(pedido_obj):
 
     for h in historico:
         dt = h.data_hora.strftime('%d/%m/%Y às %H:%M:%S') if getattr(h, 'data_hora', None) else "N/A"
-        st.markdown(f"⏱️ **{dt}** — User: {h.nome_usuario or 'SISTEMA'} | Status: `{h.status_anterior or '-'}` ➡️ `{h.status_novo}`")
+        st.markdown(f"**{dt}** — User: {h.nome_usuario or 'SISTEMA'} | Status: `{h.status_anterior or '-'}` -> `{h.status_novo}`")
         if getattr(h, 'justificativa', None):
             st.caption(f"Obs: {h.justificativa}")
 
@@ -199,92 +203,147 @@ def modal_cancelar_pedido(id_pedido, usuario_atual):
 
 
 def render_gestao_vendas(usuario_atual):
-    render_cabecalho("Gestão de Vendas & Orçamentos", "Acompanhe pedidos, emita faturas e gerencie orçamentos e devoluções.")
-    
-    if "sucesso_msg" in st.session_state:
-        st.toast(st.session_state["sucesso_msg"], icon="✅")
-        del st.session_state["sucesso_msg"]
-
     st.markdown("""
         <style>
-            div[data-testid="stModal"] {
-                z-index: 100000 !important;
-            }
-            div[data-testid="stPopoverBody"] {
-                z-index: 9999 !important;
-            }
+            div[data-testid="stModal"] { z-index: 100000 !important; }
+            div[data-testid="stPopoverBody"] { z-index: 9999 !important; }
+            .block-container { padding-top: 1rem !important; }
+            .stTabs { margin-top: -1.5rem !important; }
         </style>
     """, unsafe_allow_html=True)
     
+    render_cabecalho("Gestão de Vendas & Orçamentos", "Acompanhe pedidos, emita faturas e gerencie orçamentos e devoluções.")
+    
+    if "sucesso_msg" in st.session_state:
+        st.toast(st.session_state["sucesso_msg"])
+        del st.session_state["sucesso_msg"]
+    
     db = SessionLocal()
     try:
-        aba_pedidos, aba_orcamentos = st.tabs(["Pedidos de Venda", "Orçamentos"])
+        aba_dashboard, aba_pedidos, aba_orcamentos = st.tabs([
+            "Dashboard Comercial", 
+            "Pedidos de Venda", 
+            "Orçamentos"
+        ])
+
+        with aba_dashboard:
+            col_d1, col_d2, _ = st.columns([1, 1, 2])
+            with col_d1:
+                data_inicio = st.date_input("Data Inicial", value=datetime.today().date() - timedelta(days=30))
+            with col_d2:
+                data_fim = st.date_input("Data Final", value=datetime.today().date())
+
+            if data_inicio > data_fim:
+                st.error("A data inicial não pode ser maior que a final.")
+            else:
+                dt_inicio_full = datetime.combine(data_inicio, datetime.min.time())
+                dt_fim_full = datetime.combine(data_fim, datetime.max.time())
+
+                kpis = obter_kpis_comerciais(db, dt_inicio_full, dt_fim_full)
+                dados_faturamento = obter_faturamento_por_periodo(db, dt_inicio_full, dt_fim_full)
+                dados_top5 = obter_top_5_produtos(db, dt_inicio_full, dt_fim_full)
+
+                st.markdown("---")
+                col1, col2, col3 = st.columns(3)
+                
+                fat_formatado = f"R$ {kpis['faturamento_bruto']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                col1.metric(label="Faturamento Bruto", value=fat_formatado)
+                
+                tkt_formatado = f"R$ {kpis['ticket_medio']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                col2.metric(label="Ticket Médio", value=tkt_formatado)
+                
+                col3.metric(
+                    label="Conversão de Orçamentos",
+                    value=f"{kpis['taxa_conversao']:.1f} %",
+                    help=f"Convertidos: {kpis['orcamentos_convertidos']} | Emitidos: {kpis['orcamentos_gerados']}"
+                )
+
+                st.markdown("---")
+                
+                col_grafico1, col_grafico2 = st.columns(2)
+                with col_grafico1:
+                    st.write("**Evolução do Faturamento**")
+                    if not dados_faturamento:
+                        st.info("Não há dados de faturamento para o período selecionado.")
+                    else:
+                        df_fat = pd.DataFrame(dados_faturamento)
+                        df_fat["data"] = pd.to_datetime(df_fat["data"]).dt.strftime('%d/%m/%Y')
+                        df_fat.set_index("data", inplace=True)
+                        st.line_chart(df_fat, y="faturamento", use_container_width=True, color="#2E7D32")
+
+                with col_grafico2:
+                    st.write("**Top 5 Produtos Mais Vendidos**")
+                    if not dados_top5:
+                        st.info("Não há dados de saída para o período selecionado.")
+                    else:
+                        df_top5 = pd.DataFrame(dados_top5)
+                        df_top5.set_index("produto", inplace=True)
+                        st.bar_chart(df_top5["quantidade"], use_container_width=True, color="#7CB342")
 
         with aba_pedidos:
-            col_status, col_dt_ini, col_dt_fim = st.columns(3)
+            col_status, _ = st.columns([1, 3])
             with col_status:
                 filtro_status = st.selectbox("Status do Pedido", options=["Todos", "Confirmado", "Concluído", "Cancelado"])
             
-            with col_dt_ini:
-                data_inicio_raw = st.date_input("Data Inicial", value=datetime.today().date() - timedelta(days=30))
-                data_inicio = data_inicio_raw[0] if isinstance(data_inicio_raw, tuple) and data_inicio_raw else data_inicio_raw
-                if not data_inicio:
-                    data_inicio = datetime.today().date()
-            
-            with col_dt_fim:
-                data_fim_raw = st.date_input("Data Final", value=datetime.today().date())
-                data_fim = data_fim_raw[0] if isinstance(data_fim_raw, tuple) and data_fim_raw else data_fim_raw
-                if not data_fim:
-                    data_fim = datetime.today().date()
-
             status_param = None if filtro_status == "Todos" else filtro_status
             
-            pedidos_brutos = listar_pedidos(db=db, status=status_param, data_inicio=data_inicio, data_fim=data_fim)
+            dt_ini_pedidos = datetime.today().date() - timedelta(days=60)
+            dt_fim_pedidos = datetime.today().date()
+            
+            pedidos_brutos = listar_pedidos(db=db, status=status_param, data_inicio=dt_ini_pedidos, data_fim=dt_fim_pedidos)
             pedidos = pedidos_brutos if isinstance(pedidos_brutos, list) else []
             pedidos_vendas = [p for p in pedidos if getattr(p, 'status_venda', '') != "Orcamento"]
 
             if not pedidos_vendas:
-                st.info("Nenhum pedido de venda encontrado com os filtros atuais.")
+                st.info("Nenhum pedido de venda recente encontrado.")
             else:
-                st.markdown("---")
-                c_head = st.columns([1, 2, 3, 2, 2, 2])
-                c_head[0].write("**ID**")
-                c_head[1].write("**Data**")
-                c_head[2].write("**Cliente**")
-                c_head[3].write("**Valor (R$)**")
-                c_head[4].write("**Status**")
-                c_head[5].write("**Ações**")
-                st.markdown("---")
-
+                # Conversão para DataFrame da mesma forma que em Orçamentos
+                dados_pedidos = []
                 for p in pedidos_vendas:
-                    val_p = float(p.valor_total_pedido or 0)
-                    c_row = st.columns([1, 2, 3, 2, 2, 2])
-                    c_row[0].write(str(p.id_pedido_venda))
-                    c_row[1].write(p.data_venda.strftime('%d/%m/%Y %H:%M') if getattr(p, 'data_venda', None) else "N/A")
-                    c_row[2].write(p.cliente.razao_social if getattr(p, 'cliente', None) else "Desconhecido")
-                    c_row[3].write(f"{val_p:.2f}")
-                    c_row[4].write(p.status_venda or "Confirmado")
+                    dados_pedidos.append({
+                        "ID": p.id_pedido_venda,
+                        "Data": p.data_venda.strftime('%d/%m/%Y %H:%M') if getattr(p, 'data_venda', None) else "N/A",
+                        "Cliente": p.cliente.razao_social if getattr(p, 'cliente', None) else "Desconhecido",
+                        "Valor (R$)": f"{float(p.valor_total_pedido or 0):.2f}",
+                        "Status": p.status_venda or "Confirmado"
+                    })
+                
+                df_pedidos = pd.DataFrame(dados_pedidos)
+                st.dataframe(df_pedidos, use_container_width=True, hide_index=True)
 
-                    with c_row[5]:
-                        with st.popover("⋮", use_container_width=True):
-                            if st.button("Fatura/DANFE", key=f"fat_{p.id_pedido_venda}", use_container_width=True):
-                                modal_emitir_fatura(p.id_pedido_venda)
+                st.markdown("---")
+                st.write("#### Ações do Pedido")
+                
+                # Painel inferior para interagir com um pedido específico
+                col_id, _ = st.columns([2, 4])
+                with col_id:
+                    pedidos_ids = [p.id_pedido_venda for p in pedidos_vendas]
+                    pedido_selecionado_id = st.selectbox("Selecione o ID do pedido para interagir:", options=pedidos_ids)
+                
+                pedido_selecionado_obj = next((p for p in pedidos_vendas if p.id_pedido_venda == pedido_selecionado_id), None)
+                
+                if pedido_selecionado_obj:
+                    # Fileira com todos os botões de ação
+                    b1, b2, b3, b4, b5 = st.columns(5)
+                    
+                    if b1.button("Fatura / DANFE", key=f"fat_{pedido_selecionado_id}", use_container_width=True):
+                        modal_emitir_fatura(pedido_selecionado_id)
 
-                            tem_entrega = getattr(p, 'entrega', None) is not None
-                            entrega_despachada = tem_entrega and p.entrega.status_logistica in ["Enviado", "Entregue"]
-                            disabled_edit = bool(p.status_venda in ["Cancelado", "Concluído"] or entrega_despachada)
-                            
-                            if st.button("Editar", key=f"ed_v_{p.id_pedido_venda}", disabled=disabled_edit, use_container_width=True):
-                                modal_editar_pedido(p.id_pedido_venda, usuario_atual)
+                    tem_entrega = getattr(pedido_selecionado_obj, 'entrega', None) is not None
+                    entrega_despachada = tem_entrega and pedido_selecionado_obj.entrega.status_logistica in ["Enviado", "Entregue"]
+                    disabled_edit = bool(pedido_selecionado_obj.status_venda in ["Cancelado", "Concluído"] or entrega_despachada)
+                    
+                    if b2.button("Editar", key=f"ed_v_{pedido_selecionado_id}", disabled=disabled_edit, use_container_width=True):
+                        modal_editar_pedido(pedido_selecionado_id, usuario_atual)
 
-                            if st.button("Devolução", key=f"dev_v_{p.id_pedido_venda}", disabled=p.status_venda == "Cancelado", use_container_width=True):
-                                modal_devolucao_venda(p.id_pedido_venda, usuario_atual)
+                    if b3.button("Devolução", key=f"dev_v_{pedido_selecionado_id}", disabled=pedido_selecionado_obj.status_venda == "Cancelado", use_container_width=True):
+                        modal_devolucao_venda(pedido_selecionado_id, usuario_atual)
 
-                            if st.button("Histórico", key=f"hist_{p.id_pedido_venda}", use_container_width=True):
-                                modal_historico_pedido(p)
+                    if b4.button("Histórico", key=f"hist_{pedido_selecionado_id}", use_container_width=True):
+                        modal_historico_pedido(pedido_selecionado_obj)
 
-                            if st.button("Cancelar", key=f"canc_{p.id_pedido_venda}", disabled=p.status_venda in ["Cancelado", "Concluído"], use_container_width=True):
-                                modal_cancelar_pedido(p.id_pedido_venda, usuario_atual)
+                    if b5.button("Cancelar", key=f"canc_{pedido_selecionado_id}", disabled=pedido_selecionado_obj.status_venda in ["Cancelado", "Concluído"], use_container_width=True):
+                        modal_cancelar_pedido(pedido_selecionado_id, usuario_atual)
 
         with aba_orcamentos:
             consulta_orc = db.query(PedidoVenda).filter(PedidoVenda.status_venda == "Orcamento").order_by(PedidoVenda.data_venda.desc()).all()
@@ -293,30 +352,35 @@ def render_gestao_vendas(usuario_atual):
             if not orcamentos:
                 st.info("Nenhum orçamento pendente encontrado.")
             else:
-                c_h = st.columns([1, 2, 3, 2, 2])
-                c_h[0].write("**ID**")
-                c_h[1].write("**Data**")
-                c_h[2].write("**Cliente**")
-                c_h[3].write("**Total (R$)**")
-                c_h[4].write("**Ação**")
-                st.markdown("---")
-
+                dados_orcamentos = []
                 for orc in orcamentos:
-                    val_o = float(orc.valor_total_pedido or 0)
-                    c_r = st.columns([1, 2, 3, 2, 2])
-                    c_r[0].write(str(orc.id_pedido_venda))
-                    c_r[1].write(orc.data_venda.strftime('%d/%m/%Y %H:%M') if getattr(orc, 'data_venda', None) else "N/A")
-                    c_r[2].write(orc.cliente.razao_social if getattr(orc, 'cliente', None) else "-")
-                    c_r[3].write(f"{val_o:.2f}")
+                    dados_orcamentos.append({
+                        "ID": orc.id_pedido_venda,
+                        "Cliente": orc.cliente.razao_social if getattr(orc, 'cliente', None) else "Desconhecido",
+                        "Data": orc.data_venda.strftime('%d/%m/%Y %H:%M') if getattr(orc, 'data_venda', None) else "N/A",
+                        "Total (R$)": f"{float(orc.valor_total_pedido or 0):.2f}"
+                    })
+                
+                df_orcamentos = pd.DataFrame(dados_orcamentos)
+                st.dataframe(df_orcamentos, use_container_width=True, hide_index=True)
 
-                    with c_r[4]:
-                        if st.button("Converter em Venda", key=f"conv_{orc.id_pedido_venda}", type="primary", use_container_width=True):
-                            try:
-                                converter_orcamento_em_venda(db, orc.id_pedido_venda, usuario_atual)
-                                st.session_state["sucesso_msg"] = f"Orçamento #{orc.id_pedido_venda} convertido em venda!"
-                                st.rerun()
-                            except Exception as e_conv:
-                                st.error(f"Erro na conversão: {e_conv}")
+                st.markdown("---")
+                st.write("#### Converter Orçamento")
+                
+                col_id, col_btn, _ = st.columns([2, 2, 4])
+                with col_id:
+                    orc_ids = [o.id_pedido_venda for o in orcamentos]
+                    orc_selecionado = st.selectbox("Selecione o ID para converter", options=orc_ids)
+                
+                with col_btn:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    if st.button("Converter em Venda", type="primary", use_container_width=True):
+                        try:
+                            converter_orcamento_em_venda(db, orc_selecionado, usuario_atual)
+                            st.session_state["sucesso_msg"] = f"Orçamento #{orc_selecionado} convertido em venda!"
+                            st.rerun()
+                        except Exception as e_conv:
+                            st.error(f"Erro na conversão: {e_conv}")
 
     except Exception as e:
         st.error(f"Erro ao carregar a gestão de vendas: {e}")
