@@ -6,12 +6,14 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from src.database.models import Base
+import src.database.models.estoque  # noqa: F401 — registra localizacao_estoque
 from src.database.models.financeiro import MovimentoExtratoBancario
 from src.database.models.usuarios import LogOperacao
 from src.services.auth_service import criar_contexto_usuario, sincronizar_usuario_google
 from src.services.financeiro_service import (
     STATUS_PAGO,
     calcular_fluxo_caixa,
+    calcular_visao_financeira,
     conciliar_movimento,
     criar_lancamento_manual,
     gerar_balancete,
@@ -98,6 +100,67 @@ class FinanceiroServiceTest(unittest.TestCase):
             item for item in balancete["linhas"] if item["categoria"] == "Impostos"
         )
         self.assertEqual(Decimal("20.00"), imposto["pendente"])
+
+    def test_visao_financeira_kpi_saldo_projetado_e_inadimplencia(self):
+        hoje = date.today()
+        criar_lancamento_manual(
+            self.db,
+            self.admin,
+            "RECEITA",
+            "Cliente em atraso",
+            "Vendas",
+            "100.00",
+            hoje - timedelta(days=15),
+        )
+        criar_lancamento_manual(
+            self.db,
+            self.admin,
+            "RECEITA",
+            "Cliente no prazo",
+            "Vendas",
+            "50.00",
+            hoje + timedelta(days=10),
+        )
+        criar_lancamento_manual(
+            self.db,
+            self.admin,
+            "DESPESA",
+            "Fornecedor pendente",
+            "Compras de materiais",
+            "30.00",
+            hoje + timedelta(days=5),
+        )
+        criar_lancamento_manual(
+            self.db,
+            self.admin,
+            "RECEITA",
+            "Receita paga no mês",
+            "Serviços",
+            "200.00",
+            hoje,
+            data_pagamento=hoje,
+        )
+        criar_lancamento_manual(
+            self.db,
+            self.admin,
+            "DESPESA",
+            "Despesa paga no mês",
+            "Impostos",
+            "70.00",
+            hoje,
+            data_pagamento=hoje,
+        )
+
+        visao = calcular_visao_financeira(self.db, hoje.replace(day=1), hoje)
+        self.assertEqual(Decimal("120.00"), visao["saldo_projetado"])
+        self.assertEqual(Decimal("150.00"), visao["total_receber_pendente"])
+        self.assertEqual(Decimal("30.00"), visao["total_pagar_pendente"])
+        self.assertEqual(Decimal("100.00"), visao["inadimplencia"])
+        self.assertEqual(1, visao["qtd_titulos_atrasados"])
+        self.assertTrue(visao["serie_mensal"])
+        mes_atual = visao["serie_mensal"][-1]
+        self.assertGreaterEqual(mes_atual["entradas"], Decimal("200.00"))
+        self.assertGreaterEqual(mes_atual["saidas"], Decimal("70.00"))
 
     def test_conciliacao_baixa_lancamento_e_registra_auditoria(self):
         lancamento = self._lancamento(
