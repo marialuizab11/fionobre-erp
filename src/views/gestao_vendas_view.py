@@ -229,9 +229,17 @@ def render_gestao_vendas(usuario_atual):
         with aba_dashboard:
             col_d1, col_d2, _ = st.columns([1, 1, 2])
             with col_d1:
-                data_inicio = st.date_input("Data Inicial", value=datetime.today().date() - timedelta(days=30))
+                data_inicio = st.date_input(
+                    "Data Inicial", 
+                    value=datetime.today().date() - timedelta(days=30),
+                    format="DD/MM/YYYY"
+                )
             with col_d2:
-                data_fim = st.date_input("Data Final", value=datetime.today().date())
+                data_fim = st.date_input(
+                    "Data Final", 
+                    value=datetime.today().date(),
+                    format="DD/MM/YYYY"
+                )
 
             if data_inicio > data_fim:
                 st.error("A data inicial não pode ser maior que a final.")
