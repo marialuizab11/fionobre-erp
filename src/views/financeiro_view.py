@@ -12,6 +12,7 @@ from src.services.financeiro_service import (
     CATEGORIAS_RECEITA,
     TIPO_PAGAR,
     calcular_fluxo_caixa,
+    calcular_visao_financeira,
     cancelar_lancamento_manual,
     conciliar_movimento,
     criar_lancamento_manual,
@@ -90,6 +91,86 @@ def _render_fluxo_caixa():
             )
         else:
             st.info("Não há entradas ou saídas realizadas neste período.")
+    finally:
+        db.close()
+
+
+def _render_bi_visao_financeira():
+    st.markdown("### BI — Visão Financeira (Fluxo de Caixa)")
+    st.caption(
+        "KPI 7: Saldo Projetado · KPI 8: Inadimplência · "
+        "Gráfico mensal Entradas × Saídas."
+    )
+
+    hoje = date.today()
+    inicio_padrao = date(hoje.year, 1, 1)
+    col1, col2 = st.columns(2)
+    inicio = col1.date_input(
+        "Período do gráfico — início",
+        inicio_padrao,
+        key="bi_fin_inicio",
+    )
+    fim = col2.date_input(
+        "Período do gráfico — fim",
+        hoje,
+        key="bi_fin_fim",
+    )
+    if inicio > fim:
+        st.error("A data inicial não pode ser posterior à data final.")
+        return
+
+    db = SessionLocal()
+    try:
+        visao = calcular_visao_financeira(db, inicio, fim)
+
+        k1, k2, k3 = st.columns(3)
+        k1.metric("KPI 7 — Saldo Projetado", _moeda(visao["saldo_projetado"]))
+        k2.metric("KPI 8 — Inadimplência / Atrasos", _moeda(visao["inadimplencia"]))
+        k3.metric("Títulos em atraso", visao["qtd_titulos_atrasados"])
+
+        d1, d2 = st.columns(2)
+        d1.metric("Contas a Receber Pendentes", _moeda(visao["total_receber_pendente"]))
+        d2.metric("Contas a Pagar Pendentes", _moeda(visao["total_pagar_pendente"]))
+
+        st.markdown("#### Entradas vs Saídas (mês a mês)")
+        serie = visao["serie_mensal"]
+        if not serie:
+            st.info("Não há lançamentos no período selecionado para montar o gráfico.")
+        else:
+            df = pd.DataFrame(
+                [
+                    {
+                        "Mês": item["label"],
+                        "Entradas (Receitas)": float(item["entradas"]),
+                        "Saídas (Custos)": float(item["saidas"]),
+                    }
+                    for item in serie
+                ]
+            ).set_index("Mês")
+            st.bar_chart(df)
+
+            st.dataframe(
+                [
+                    {
+                        "Mês": item["label"],
+                        "Entradas (R$)": float(item["entradas"]),
+                        "Saídas (R$)": float(item["saidas"]),
+                        "Saldo do mês (R$)": float(item["saldo"]),
+                    }
+                    for item in serie
+                ],
+                use_container_width=True,
+                hide_index=True,
+            )
+
+        with st.expander("Apoio à decisão (2VA)"):
+            st.markdown(
+                """
+- **Padrão:** alta inadimplência (KPI 8) comprimindo o saldo projetado (KPI 7).
+- **Recomendação:** interromper novas vendas a prazo para clientes com histórico
+  de atraso e priorizar cobranças dos títulos vencidos.
+                """.strip()
+            )
     finally:
         db.close()
 
@@ -411,6 +492,7 @@ def render_financeiro(usuario_atual):
     )
     abas = st.tabs(
         [
+            "BI Visão Financeira",
             "Fluxo de Caixa",
             "Contas a Receber",
             "Contas a Pagar",
@@ -420,14 +502,16 @@ def render_financeiro(usuario_atual):
         ]
     )
     with abas[0]:
-        _render_fluxo_caixa()
+        _render_bi_visao_financeira()
     with abas[1]:
-        render_contas_receber(usuario_atual, exibir_cabecalho=False)
+        _render_fluxo_caixa()
     with abas[2]:
-        render_contas_pagar(usuario_atual, exibir_cabecalho=False)
+        render_contas_receber(usuario_atual, exibir_cabecalho=False)
     with abas[3]:
-        _render_lancamentos_manuais(usuario_atual)
+        render_contas_pagar(usuario_atual, exibir_cabecalho=False)
     with abas[4]:
-        _render_relatorios()
+        _render_lancamentos_manuais(usuario_atual)
     with abas[5]:
+        _render_relatorios()
+    with abas[6]:
         _render_conciliacao(usuario_atual)

@@ -361,6 +361,91 @@ def calcular_fluxo_caixa(
     }
 
 
+def calcular_visao_financeira(
+    db: Session,
+    data_inicio: date | datetime | None = None,
+    data_fim: date | datetime | None = None,
+    referencia: date | datetime | None = None,
+) -> dict:
+    """
+    KPIs da Visão Financeira (2VA / BI):
+    - KPI 7 Saldo Projetado = receber pendente - pagar pendente
+    - KPI 8 Inadimplência = receber pendente com vencimento < referência
+    - Série mensal: entradas (receber) vs saídas (pagar) no período
+    """
+    agora = _como_datetime(referencia or datetime.now())
+    inicio = _como_datetime(data_inicio) if data_inicio is not None else None
+    fim = _como_datetime(data_fim, True) if data_fim is not None else None
+
+    pendentes = (
+        db.query(LancamentoFinanceiro)
+        .filter(LancamentoFinanceiro.status_pagamento == STATUS_PENDENTE)
+        .all()
+    )
+
+    total_receber_pendente = Decimal("0.00")
+    total_pagar_pendente = Decimal("0.00")
+    inadimplencia = Decimal("0.00")
+    titulos_atrasados = 0
+
+    for lancamento in pendentes:
+        valor = Decimal(str(lancamento.valor))
+        if lancamento.tipo_lancamento == TIPO_RECEBER:
+            total_receber_pendente += valor
+            if lancamento.data_vencimento is not None and lancamento.data_vencimento < agora:
+                inadimplencia += valor
+                titulos_atrasados += 1
+        elif lancamento.tipo_lancamento == TIPO_PAGAR:
+            total_pagar_pendente += valor
+
+    saldo_projetado = total_receber_pendente - total_pagar_pendente
+
+    query_serie = db.query(LancamentoFinanceiro).filter(
+        LancamentoFinanceiro.status_pagamento != STATUS_CANCELADO
+    )
+    lancamentos_serie = query_serie.all()
+
+    mensal: dict[str, dict] = {}
+    for lancamento in lancamentos_serie:
+        data_base = lancamento.data_pagamento or lancamento.data_vencimento
+        if data_base is None:
+            continue
+        if inicio is not None and data_base < inicio:
+            continue
+        if fim is not None and data_base > fim:
+            continue
+
+        chave = data_base.strftime("%Y-%m")
+        bucket = mensal.setdefault(
+            chave,
+            {
+                "mes": chave,
+                "label": data_base.strftime("%b/%Y").capitalize(),
+                "entradas": Decimal("0.00"),
+                "saidas": Decimal("0.00"),
+            },
+        )
+        valor = Decimal(str(lancamento.valor))
+        if lancamento.tipo_lancamento == TIPO_RECEBER:
+            bucket["entradas"] += valor
+        elif lancamento.tipo_lancamento == TIPO_PAGAR:
+            bucket["saidas"] += valor
+
+    serie_mensal = [mensal[chave] for chave in sorted(mensal.keys())]
+    for item in serie_mensal:
+        item["saldo"] = item["entradas"] - item["saidas"]
+
+    return {
+        "saldo_projetado": saldo_projetado,
+        "total_receber_pendente": total_receber_pendente,
+        "total_pagar_pendente": total_pagar_pendente,
+        "inadimplencia": inadimplencia,
+        "qtd_titulos_atrasados": titulos_atrasados,
+        "serie_mensal": serie_mensal,
+        "referencia": agora,
+    }
+
+
 def gerar_balancete(
     db: Session, data_inicio: date | datetime, data_fim: date | datetime
 ) -> dict:
