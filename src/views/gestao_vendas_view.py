@@ -180,7 +180,7 @@ def modal_historico_pedido(pedido_obj):
 
 @st.dialog("Cancelar Pedido de Venda")
 def modal_cancelar_pedido(id_pedido, usuario_atual):
-    st.warning(f"Você está prestes a cancelar o pedido #{id_pedido}.")
+    st.warning(f"Você está prestes a cancelar o pedido/orçamento #{id_pedido}.")
     justificativa = st.text_area("Justificativa do Cancelamento", placeholder="Informe o motivo (mínimo de 5 caracteres)...")
     col1, col2 = st.columns(2)
     with col1:
@@ -191,7 +191,7 @@ def modal_cancelar_pedido(id_pedido, usuario_atual):
                 db = SessionLocal()
                 try:
                     cancelar_venda(db=db, id_pedido=id_pedido, justificativa=justificativa, usuario=usuario_atual)
-                    st.session_state["sucesso_msg"] = f"Pedido #{id_pedido} cancelado com sucesso!"
+                    st.session_state["sucesso_msg"] = f"Orçamento/Pedido #{id_pedido} cancelado com sucesso!"
                     st.rerun()
                 except Exception as e:
                     st.error(f"Erro ao cancelar: {e}")
@@ -305,7 +305,6 @@ def render_gestao_vendas(usuario_atual):
             if not pedidos_vendas:
                 st.info("Nenhum pedido de venda recente encontrado.")
             else:
-                # Conversão para DataFrame da mesma forma que em Orçamentos
                 dados_pedidos = []
                 for p in pedidos_vendas:
                     dados_pedidos.append({
@@ -322,16 +321,14 @@ def render_gestao_vendas(usuario_atual):
                 st.markdown("---")
                 st.write("#### Ações do Pedido")
                 
-                # Painel inferior para interagir com um pedido específico
                 col_id, _ = st.columns([2, 4])
                 with col_id:
                     pedidos_ids = [p.id_pedido_venda for p in pedidos_vendas]
-                    pedido_selecionado_id = st.selectbox("Selecione o ID do pedido para interagir:", options=pedidos_ids)
+                    pedido_selecionado_id = st.selectbox("Selecione o ID do pedido para interagir:", options=pedidos_ids, key="sel_ped_acao")
                 
                 pedido_selecionado_obj = next((p for p in pedidos_vendas if p.id_pedido_venda == pedido_selecionado_id), None)
                 
                 if pedido_selecionado_obj:
-                    # Fileira com todos os botões de ação
                     b1, b2, b3, b4, b5 = st.columns(5)
                     
                     if b1.button("Fatura / DANFE", key=f"fat_{pedido_selecionado_id}", use_container_width=True):
@@ -373,14 +370,14 @@ def render_gestao_vendas(usuario_atual):
                 st.dataframe(df_orcamentos, use_container_width=True, hide_index=True)
 
                 st.markdown("---")
-                st.write("#### Converter Orçamento")
+                st.write("#### Gerenciar Orçamento")
                 
-                col_id, col_btn, _ = st.columns([2, 2, 4])
+                col_id, col_conv, col_canc, _ = st.columns([2, 2, 2, 2])
                 with col_id:
                     orc_ids = [o.id_pedido_venda for o in orcamentos]
-                    orc_selecionado = st.selectbox("Selecione o ID para converter", options=orc_ids)
+                    orc_selecionado = st.selectbox("Selecione o ID do Orçamento", options=orc_ids, key="sel_orc_acao")
                 
-                with col_btn:
+                with col_conv:
                     st.markdown("<br>", unsafe_allow_html=True)
                     if st.button("Converter em Venda", type="primary", use_container_width=True):
                         try:
@@ -389,6 +386,11 @@ def render_gestao_vendas(usuario_atual):
                             st.rerun()
                         except Exception as e_conv:
                             st.error(f"Erro na conversão: {e_conv}")
+
+                with col_canc:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    if st.button("Cancelar Orçamento", type="secondary", use_container_width=True):
+                        modal_cancelar_pedido(orc_selecionado, usuario_atual)
 
     except Exception as e:
         st.error(f"Erro ao carregar a gestão de vendas: {e}")

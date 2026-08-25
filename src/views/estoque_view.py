@@ -28,10 +28,10 @@ def _render_bi_suprimentos(db):
     hoje = date.today()
     col_inicio, col_fim, _ = st.columns([1, 1, 2])
     data_inicio = col_inicio.date_input(
-        "Data inicial", hoje - timedelta(days=30), key="bi_suprimentos_inicio"
+        "Data inicial", hoje - timedelta(days=30), key="bi_suprimentos_inicio", format="DD/MM/YYYY"
     )
     data_fim = col_fim.date_input(
-        "Data final", hoje, key="bi_suprimentos_fim"
+        "Data final", hoje, key="bi_suprimentos_fim", format="DD/MM/YYYY"
     )
 
     if data_inicio > data_fim:

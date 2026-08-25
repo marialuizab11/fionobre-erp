@@ -39,9 +39,9 @@ def _periodo_padrao(chave: str):
     hoje = date.today()
     col1, col2 = st.columns(2)
     inicio = col1.date_input(
-        "Data inicial", hoje.replace(day=1), key=f"{chave}_inicio"
+        "Data inicial", hoje.replace(day=1), key=f"{chave}_inicio", format="DD/MM/YYYY"
     )
-    fim = col2.date_input("Data final", hoje, key=f"{chave}_fim")
+    fim = col2.date_input("Data final", hoje, key=f"{chave}_fim", format="DD/MM/YYYY")
     if inicio > fim:
         st.error("A data inicial não pode ser posterior à data final.")
         return None, None
@@ -109,11 +109,13 @@ def _render_bi_visao_financeira():
         "Período do gráfico — início",
         inicio_padrao,
         key="bi_fin_inicio",
+        format="DD/MM/YYYY",
     )
     fim = col2.date_input(
         "Período do gráfico — fim",
         hoje,
         key="bi_fin_fim",
+        format="DD/MM/YYYY",
     )
     if inicio > fim:
         st.error("A data inicial não pode ser posterior à data final.")
@@ -187,10 +189,10 @@ def _render_lancamentos_manuais(usuario_atual):
         categoria = col1.selectbox("Categoria *", categorias)
         valor = col2.number_input("Valor (R$) *", min_value=0.01, step=10.0)
         col3, col4 = st.columns(2)
-        vencimento = col3.date_input("Vencimento", date.today())
+        vencimento = col3.date_input("Vencimento", date.today(), format="DD/MM/YYYY")
         ja_pago = col4.checkbox("Já foi pago/recebido")
         data_pagamento = (
-            st.date_input("Data do pagamento/recebimento", date.today())
+            st.date_input("Data do pagamento/recebimento", date.today(), format="DD/MM/YYYY")
             if ja_pago
             else None
         )
@@ -403,7 +405,7 @@ def _render_conciliacao(usuario_atual):
     with aba_manual:
         with st.form("movimento_extrato_manual", clear_on_submit=True):
             col1, col2 = st.columns(2)
-            data_movimento = col1.date_input("Data", date.today())
+            data_movimento = col1.date_input("Data", date.today(), format="DD/MM/YYYY")
             valor = col2.number_input("Valor (R$)", value=0.0, step=10.0)
             descricao = st.text_input("Descrição")
             referencia = st.text_input("Referência")
