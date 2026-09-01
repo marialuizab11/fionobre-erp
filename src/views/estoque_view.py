@@ -1,154 +1,12 @@
 import streamlit as st
 import pandas as pd
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 from src.database.connection import SessionLocal
 from src.database.models.cadastros import Item
 from src.database.models.estoque import LocalizacaoEstoque
 from src.database.models.core import MovimentacaoEstoque
-from src.services.bi_suprimentos_service import (
-    calcular_indicadores_suprimentos,
-    calcular_necessidades_reposicao,
-)
 from src.services.estoque_service import transferir_estoque, ajustar_estoque_manual
 from src.views.components.ui_components import render_cabecalho
-
-
-def _formatar_reais(valor):
-    formatado = f"{float(valor):,.2f}"
-    return f"R$ {formatado.replace(',', 'X').replace('.', ',').replace('X', '.')}"
-
-
-def _render_bi_suprimentos(db):
-    st.markdown("### Visão de Suprimentos e Estoque")
-    st.caption(
-        "Acompanhe o capital imobilizado, as rupturas e as aquisições confirmadas "
-        "ou recebidas no período."
-    )
-
-    hoje = date.today()
-    col_inicio, col_fim, _ = st.columns([1, 1, 2])
-    data_inicio = col_inicio.date_input(
-        "Data inicial", hoje - timedelta(days=30), key="bi_suprimentos_inicio", format="DD/MM/YYYY"
-    )
-    data_fim = col_fim.date_input(
-        "Data final", hoje, key="bi_suprimentos_fim", format="DD/MM/YYYY"
-    )
-
-    if data_inicio > data_fim:
-        st.warning("A data inicial deve ser anterior ou igual à data final.")
-        return
-
-    indicadores = calcular_indicadores_suprimentos(db, data_inicio, data_fim)
-    col1, col2, col3 = st.columns(3)
-    col1.metric(
-        "Valor Imobilizado em Estoque",
-        _formatar_reais(indicadores.valor_imobilizado),
-        help="Soma do saldo atual multiplicado pelo custo médio de cada item.",
-    )
-    col2.metric(
-        "Itens em Ruptura",
-        indicadores.itens_em_ruptura,
-        help="Itens com saldo atual abaixo do estoque mínimo configurado.",
-    )
-    col3.metric(
-        "Custo Total de Aquisição",
-        _formatar_reais(indicadores.custo_total_aquisicao),
-        help="Pedidos confirmados ou recebidos cuja data do pedido está no período.",
-    )
-
-    st.markdown("#### Distribuição do valor em estoque por tipo de item")
-    if not indicadores.valor_por_tipo:
-        st.info("Não há valor em estoque para exibir no gráfico.")
-    else:
-        dados_grafico = pd.DataFrame(indicadores.valor_por_tipo)
-        st.vega_lite_chart(
-            dados_grafico,
-            {
-                "mark": {"type": "arc", "innerRadius": 65},
-                "encoding": {
-                    "theta": {
-                        "field": "Valor em estoque",
-                        "type": "quantitative",
-                        "stack": True,
-                    },
-                    "color": {
-                        "field": "Tipo de item",
-                        "type": "nominal",
-                        "legend": {"title": "Tipo de item", "orient": "right"},
-                        "scale": {"range": ["#2E7D32", "#7CB342", "#C0CA33"]},
-                    },
-                    "tooltip": [
-                        {"field": "Tipo de item", "type": "nominal"},
-                        {
-                            "field": "Valor em estoque",
-                            "type": "quantitative",
-                            "format": ",.2f",
-                            "title": "Valor (R$)",
-                        },
-                    ],
-                },
-                "view": {"stroke": None},
-            },
-            use_container_width=True,
-        )
-
-    st.markdown("#### Necessidades de reposição")
-    st.caption(
-        "Sugestão = estoque mínimo − saldo atual − quantidades em pedidos "
-        "criados ou confirmados."
-    )
-    necessidades = calcular_necessidades_reposicao(db)
-    if not necessidades:
-        st.info("Nenhum item cadastrado para analisar.")
-        return
-
-    tipos = sorted({registro["Tipo"] for registro in necessidades})
-    col_situacao, col_tipo, col_resumo = st.columns([1, 1, 2])
-    filtro_situacao = col_situacao.selectbox(
-        "Situação",
-        [
-            "Com necessidade de compra",
-            "Todos",
-            "Em ruptura",
-            "Compra em andamento",
-            "Normal",
-        ],
-        key="bi_reposicao_situacao",
-    )
-    filtro_tipo = col_tipo.selectbox(
-        "Tipo de item", ["Todos", *tipos], key="bi_reposicao_tipo"
-    )
-
-    if filtro_situacao == "Com necessidade de compra":
-        filtradas = [r for r in necessidades if r["Sugestão de compra"] > 0]
-    elif filtro_situacao == "Em ruptura":
-        filtradas = [r for r in necessidades if r["Saldo atual"] < r["Estoque mínimo"]]
-    elif filtro_situacao == "Todos":
-        filtradas = necessidades
-    else:
-        filtradas = [r for r in necessidades if r["Situação"] == filtro_situacao]
-
-    if filtro_tipo != "Todos":
-        filtradas = [r for r in filtradas if r["Tipo"] == filtro_tipo]
-
-    itens_para_comprar = sum(r["Sugestão de compra"] > 0 for r in necessidades)
-    col_resumo.metric("Itens com compra sugerida", itens_para_comprar)
-
-    if not filtradas:
-        st.info("Nenhum item corresponde aos filtros selecionados.")
-        return
-
-    st.dataframe(
-        pd.DataFrame(filtradas),
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            "Saldo atual": st.column_config.NumberColumn(format="%.2f"),
-            "Estoque mínimo": st.column_config.NumberColumn(format="%.2f"),
-            "Em compra": st.column_config.NumberColumn(format="%.2f"),
-            "Sugestão de compra": st.column_config.NumberColumn(format="%.2f"),
-        },
-    )
 
 
 def render_estoque(usuario_atual):
@@ -160,9 +18,8 @@ def render_estoque(usuario_atual):
 
     db = SessionLocal()
     try:
-        tab_visao, tab_bi, tab_locais, tab_mov = st.tabs([
+        tab_visao, tab_locais, tab_mov = st.tabs([
             "Visão Geral",
-            "BI de Suprimentos",
             "Transferências e Ajustes", 
             "Histórico de Movimentações"
         ])
@@ -182,7 +39,7 @@ def render_estoque(usuario_atual):
                     total_unidades = sum(float(i.saldo_estoque) for i in itens)
                     st.metric("Saldo Total em Estoque", f"{total_unidades:.2f}")
 
-                st.markdown("### 📋 Relação de Itens e Insumos")
+                st.markdown("### Relação de Itens e Insumos")
                 
                 dados_tabela = []
                 for item in itens:
@@ -199,9 +56,6 @@ def render_estoque(usuario_atual):
                     
                 st.dataframe(pd.DataFrame(dados_tabela), use_container_width=True, hide_index=True)
 
-        with tab_bi:
-            _render_bi_suprimentos(db)
-
         with tab_locais:
             locais = db.query(LocalizacaoEstoque).filter(LocalizacaoEstoque.ativo == 'S').all()
             itens_disp = db.query(Item).all()
@@ -214,7 +68,7 @@ def render_estoque(usuario_atual):
                 col_ajuste, col_transf = st.columns(2)
                 
                 with col_ajuste:
-                    st.markdown("#### 🔧 Ajuste Manual")
+                    st.markdown("#### Ajuste Manual")
                     with st.form("form_ajuste_estoque"):
                         item_ajuste = st.selectbox("Item", itens_disp, format_func=lambda x: f"{x.id_item} - {x.descricao}", key="ajuste_item")
                         local_ajuste = st.selectbox("Localização", locais, format_func=lambda x: x.nome, key="ajuste_local")
@@ -234,7 +88,7 @@ def render_estoque(usuario_atual):
                                     st.error(f"Erro ao registrar ajuste: {e}")
 
                 with col_transf:
-                    st.markdown("#### ↔️ Transferência Interna")
+                    st.markdown("#### Transferência Interna")
                     with st.form("form_transf_estoque"):
                         item_transf = st.selectbox("Item", itens_disp, format_func=lambda x: f"{x.id_item} - {x.descricao}", key="transf_item")
                         loc_origem = st.selectbox("Origem", locais, format_func=lambda x: x.nome, key="transf_origem")

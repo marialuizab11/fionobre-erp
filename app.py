@@ -18,6 +18,7 @@ from src.views.gestao_vendas_view import render_gestao_vendas
 from src.views.logistica_view import render_logistica
 from src.views.producao_view import render_producao
 from src.views.vendas_view import render_vendas
+from src.views.dashboards_view import render_dashboards
 
 
 @st.cache_resource
@@ -55,7 +56,9 @@ def main():
         rotas_possiveis["Financeiro"] = lambda: render_financeiro(usuario_atual)
     if usuario_atual.pode("logistica.gerenciar"):
         rotas_possiveis["Gestao Logistica"] = lambda: render_logistica(usuario_atual)
+        
     if usuario_atual.pode("usuarios.gerenciar") or usuario_atual.pode("auditoria.visualizar"):
+        rotas_possiveis["BI & Indicadores"] = lambda: render_dashboards(usuario_atual)
         rotas_possiveis["Administracao"] = lambda: render_admin(usuario_atual)
 
     if not rotas_possiveis:

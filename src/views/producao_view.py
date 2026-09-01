@@ -1,5 +1,4 @@
 from datetime import date, timedelta
-
 import streamlit as st
 
 from src.database.connection import SessionLocal
@@ -11,7 +10,6 @@ from src.services.producao_service import (
     calcular_necessidade_materiais,
     cancelar_ordem_producao,
     configurar_capacidade_centro,
-    consultar_carga_centros,
     criar_centro_producao,
     criar_ordem_producao,
     finalizar_producao,
@@ -97,7 +95,7 @@ def _cadastro_centro(db, usuario_atual):
                     st.error(str(erro))
 
 
-def _roteiros_e_capacidade(db, usuario_atual):
+def _roteiros(db, usuario_atual):
     produtos = db.query(Item).filter(Item.tipo_item == "PRODUTO_ACABADO").all()
     centros = db.query(CentroProducao).filter(CentroProducao.ativo == "S").all()
     centros_capazes = [item for item in centros if item.capacidade]
@@ -193,32 +191,6 @@ def _roteiros_e_capacidade(db, usuario_atual):
         except Exception as erro:
             st.error(str(erro))
 
-    st.markdown("### Ocupação dos centros")
-    col1, col2 = st.columns(2)
-    inicio = col1.date_input("Início", date.today(), key="capacidade_inicio")
-    fim = col2.date_input(
-        "Fim", date.today() + timedelta(days=14), key="capacidade_fim"
-    )
-    carga = consultar_carga_centros(db, inicio, fim)
-    if carga:
-        st.dataframe(
-            [
-                {
-                    "Data": item["data"].strftime("%d/%m/%Y"),
-                    "Centro": item["centro"],
-                    "Capacidade (h)": float(item["capacidade"]),
-                    "Alocado (h)": float(item["alocado"]),
-                    "Disponível (h)": float(item["disponivel"]),
-                    "Ocupação (%)": float(item["ocupacao_percentual"]),
-                }
-                for item in carga
-            ],
-            use_container_width=True,
-            hide_index=True,
-        )
-    else:
-        st.info("Nenhuma capacidade foi alocada nesse período.")
-
 
 def _fichas_tecnicas(db, usuario_atual):
     produtos = db.query(Item).filter(Item.tipo_item == "PRODUTO_ACABADO").all()
@@ -301,6 +273,7 @@ def _fichas_tecnicas(db, usuario_atual):
             use_container_width=True,
             hide_index=True,
         )
+
 
 def _nova_ordem(db, usuario_atual):
     centros = db.query(CentroProducao).filter(CentroProducao.ativo == "S").all()
@@ -646,7 +619,7 @@ def render_producao(usuario_atual):
         with aba_ficha:
             _fichas_tecnicas(db, usuario_atual)
         with aba_roteiro:
-            _roteiros_e_capacidade(db, usuario_atual)
+            _roteiros(db, usuario_atual)
         with aba_nova:
             _nova_ordem(db, usuario_atual)
         with aba_gestao:
