@@ -1,4 +1,6 @@
+import traceback
 import streamlit as st
+import pandas as pd
 
 from src.database.connection import SessionLocal
 from src.services.cadastro_service import (
@@ -134,29 +136,37 @@ def _render_clientes(db, usuario_atual) -> None:
         st.info("Nenhum cliente cadastrado.")
         return
 
-    c_head = st.columns([1, 3, 2, 2.5, 2, 1.5])
-    c_head[0].write("**ID**")
-    c_head[1].write("**Nome/Razão Social**")
-    c_head[2].write("**CPF/CNPJ**")
-    c_head[3].write("**E-mail**")
-    c_head[4].write("**Cidade/UF**")
-    c_head[5].write("**Ações**")
-    st.markdown("---")
-
+    dados_clientes = []
     for cli in clientes:
-        c_row = st.columns([1, 3, 2, 2.5, 2, 1.5])
-        c_row[0].write(str(cli.id_cliente))
-        c_row[1].write(cli.razao_social)
-        c_row[2].write(cli.cnpj_cpf)
-        c_row[3].write(cli.email or "-")
-        c_row[4].write(f"{cli.cidade or '-'}/{cli.uf or '-'}")
-        
-        with c_row[5]:
-            with st.popover("⋮", use_container_width=True):
-                if st.button("Editar", key=f"ed_cli_{cli.id_cliente}", use_container_width=True):
-                    modal_editar_cliente(cli, usuario_atual)
-                if st.button("Excluir", key=f"del_cli_{cli.id_cliente}", use_container_width=True):
-                    modal_excluir_cliente(cli, usuario_atual)
+        dados_clientes.append({
+            "ID": cli.id_cliente,
+            "Nome/Razão Social": cli.razao_social,
+            "CPF/CNPJ": cli.cnpj_cpf,
+            "E-mail": cli.email or "-",
+            "Cidade/UF": f"{cli.cidade or '-'}/{cli.uf or '-'}"
+        })
+    df_clientes = pd.DataFrame(dados_clientes)
+    st.dataframe(df_clientes, use_container_width=True, hide_index=True)
+
+    st.markdown("---")
+    st.write("#### Ações do Cliente")
+    col_id, col_ed, col_del, _ = st.columns([3, 2, 2, 3])
+    
+    with col_id:
+        cli_opcoes = {c.id_cliente: f"ID {c.id_cliente} - {c.razao_social}" for c in clientes}
+        cli_selecionado_id = st.selectbox("Selecione o Cliente:", options=list(cli_opcoes.keys()), format_func=lambda x: cli_opcoes[x], key="sel_cli")
+    
+    cli_obj = next((c for c in clientes if c.id_cliente == cli_selecionado_id), None)
+    
+    with col_ed:
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("Editar", key="ed_cli_btn", use_container_width=True):
+            modal_editar_cliente(cli_obj, usuario_atual)
+            
+    with col_del:
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("Excluir", key="del_cli_btn", use_container_width=True):
+            modal_excluir_cliente(cli_obj, usuario_atual)
 
 
 # ==========================================
@@ -266,31 +276,38 @@ def _render_itens(db, usuario_atual) -> None:
         st.info("Nenhum item cadastrado.")
         return
 
-    c_head = st.columns([1, 3, 2, 1.5, 1.5, 1.5, 1.5])
-    c_head[0].write("**ID**")
-    c_head[1].write("**Descrição**")
-    c_head[2].write("**Tipo**")
-    c_head[3].write("**Saldo**")
-    c_head[4].write("**Preço (R$)**")
-    c_head[5].write("**Custo (R$)**")
-    c_head[6].write("**Ações**")
-    st.markdown("---")
-
+    dados_itens = []
     for item in itens:
-        c_row = st.columns([1, 3, 2, 1.5, 1.5, 1.5, 1.5])
-        c_row[0].write(str(item.id_item))
-        c_row[1].write(item.descricao)
-        c_row[2].write(item.tipo_item)
-        c_row[3].write(f"{float(item.saldo_estoque):.2f} {item.unidade_medida}")
-        c_row[4].write(f"{float(item.preco_venda):.2f}")
-        c_row[5].write(f"{float(item.custo_medio):.2f}")
-        
-        with c_row[6]:
-            with st.popover("⋮", use_container_width=True):
-                if st.button("Editar", key=f"ed_itm_{item.id_item}", use_container_width=True):
-                    modal_editar_item(item, usuario_atual)
-                if st.button("Excluir", key=f"del_itm_{item.id_item}", use_container_width=True):
-                    modal_excluir_item(item, usuario_atual)
+        dados_itens.append({
+            "ID": item.id_item,
+            "Descrição": item.descricao,
+            "Tipo": item.tipo_item,
+            "Saldo": f"{float(item.saldo_estoque):.2f} {item.unidade_medida}",
+            "Preço (R$)": f"{float(item.preco_venda):.2f}",
+            "Custo (R$)": f"{float(item.custo_medio):.2f}"
+        })
+    df_itens = pd.DataFrame(dados_itens)
+    st.dataframe(df_itens, use_container_width=True, hide_index=True)
+
+    st.markdown("---")
+    st.write("#### Ações do Item")
+    col_id, col_ed, col_del, _ = st.columns([3, 2, 2, 3])
+    
+    with col_id:
+        item_opcoes = {i.id_item: f"ID {i.id_item} - {i.descricao}" for i in itens}
+        item_selecionado_id = st.selectbox("Selecione o Item:", options=list(item_opcoes.keys()), format_func=lambda x: item_opcoes[x], key="sel_item")
+    
+    item_obj = next((i for i in itens if i.id_item == item_selecionado_id), None)
+    
+    with col_ed:
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("Editar", key="ed_item_btn", use_container_width=True):
+            modal_editar_item(item_obj, usuario_atual)
+            
+    with col_del:
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("Excluir", key="del_item_btn", use_container_width=True):
+            modal_excluir_item(item_obj, usuario_atual)
 
 
 # ==========================================
@@ -383,30 +400,38 @@ def _render_fornecedores(db, usuario_atual) -> None:
         st.info("Nenhum fornecedor cadastrado.")
         return
 
-    c_head = st.columns([1, 3, 2, 2, 2, 1.5])
-    c_head[0].write("**ID**")
-    c_head[1].write("**Razão Social**")
-    c_head[2].write("**CNPJ / CPF**")
-    c_head[3].write("**E-mail**")
-    c_head[4].write("**Telefone**")
-    c_head[5].write("**Ações**")
-    st.markdown("---")
-
+    dados_forn = []
     for forn in fornecedores:
-        c_row = st.columns([1, 3, 2, 2, 2, 1.5])
-        c_row[0].write(str(forn.id_fornecedor))
-        c_row[1].write(forn.razao_social)
         doc = getattr(forn, 'cnpj', getattr(forn, 'cnpj_cpf', '-'))
-        c_row[2].write(doc)
-        c_row[3].write(forn.email or "-")
-        c_row[4].write(forn.telefone or "-")
-        
-        with c_row[5]:
-            with st.popover("⋮", use_container_width=True):
-                if st.button("Editar", key=f"ed_forn_{forn.id_fornecedor}", use_container_width=True):
-                    modal_editar_fornecedor(forn, usuario_atual)
-                if st.button("Excluir", key=f"del_forn_{forn.id_fornecedor}", use_container_width=True):
-                    modal_excluir_fornecedor(forn, usuario_atual)
+        dados_forn.append({
+            "ID": forn.id_fornecedor,
+            "Razão Social": forn.razao_social,
+            "CNPJ / CPF": doc,
+            "E-mail": forn.email or "-",
+            "Telefone": forn.telefone or "-"
+        })
+    df_forn = pd.DataFrame(dados_forn)
+    st.dataframe(df_forn, use_container_width=True, hide_index=True)
+
+    st.markdown("---")
+    st.write("#### Ações do Fornecedor")
+    col_id, col_ed, col_del, _ = st.columns([3, 2, 2, 3])
+    
+    with col_id:
+        forn_opcoes = {f.id_fornecedor: f"ID {f.id_fornecedor} - {f.razao_social}" for f in fornecedores}
+        forn_selecionado_id = st.selectbox("Selecione o Fornecedor:", options=list(forn_opcoes.keys()), format_func=lambda x: forn_opcoes[x], key="sel_forn")
+    
+    forn_obj = next((f for f in fornecedores if f.id_fornecedor == forn_selecionado_id), None)
+    
+    with col_ed:
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("Editar", key="ed_forn_btn", use_container_width=True):
+            modal_editar_fornecedor(forn_obj, usuario_atual)
+            
+    with col_del:
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("Excluir", key="del_forn_btn", use_container_width=True):
+            modal_excluir_fornecedor(forn_obj, usuario_atual)
 
 
 # ==========================================

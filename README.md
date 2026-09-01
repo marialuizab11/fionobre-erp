@@ -11,8 +11,6 @@ O sistema segue separação de responsabilidades entre configuração, persistê
 ```text
 fionobre-erp/
 ├── config/                 # Variáveis de ambiente e DATABASE_URL
-├── scripts/
-│   └── seed_db.py          # Seed operacional / dados para BI
 ├── src/
 │   ├── database/           # ORM SQLAlchemy + conexão PostgreSQL
 │   ├── services/           # Regras de negócio
@@ -21,7 +19,8 @@ fionobre-erp/
 ├── tests/                  # Testes automatizados
 ├── app.py                  # Entrada da aplicação
 ├── init_db.py              # Cria tabelas e perfis padrão
-├── .env.example            # Modelo de credenciais (sem segredos reais)
+├── seed.py                 # Povoamento automático de dados para o BI
+├── .env.example             # Modelo de credenciais (sem segredos reais)
 ├── requirements.txt
 └── README.md
 ```
@@ -29,10 +28,10 @@ fionobre-erp/
 ### Módulos da interface
 
 | Menu | Função |
-|------|--------|
+|---|---|
 | Controle de Estoque | Saldos, localizações, ajustes e transferências |
 | Pedidos de Venda | Carrinho, orçamento ou confirmação com faturamento/logística |
-| Gestão de Vendas | Histórico, conversão de orçamento e cancelamento |
+| Gestão de Vendas | Histórico, conversão de orçamento, cancelamento e Dashboard |
 | Contas a Receber | Baixa de pagamentos e acompanhamento financeiro |
 | Gestão Logística | Entregas, rotas, rastreio e comprovantes |
 | Administração | Usuários, perfis e auditoria (conforme permissões) |
@@ -45,9 +44,9 @@ Orcamento  →  Confirmado  →  Concluído
      └──── Cancelado ┘
 ```
 
-- **Orçamento:** não baixa estoque e não gera financeiro/logística.
-- **Confirmado:** baixa estoque e segue o fluxo operacional.
-- **Cancelamento:** permitido enquanto não houver pagamento `Pago` e a logística não estiver `Enviado`/`Entregue`.
+- **Orçamento**: não baixa estoque e não gera financeiro/logística.
+- **Confirmado**: baixa estoque e segue o fluxo operacional.
+- **Cancelamento**: permitido enquanto não houver pagamento `Pago` e a logística não estiver `Enviado`/`Entregue`.
 
 ---
 
@@ -55,7 +54,7 @@ Orcamento  →  Confirmado  →  Concluído
 
 ### 1. Pré-requisitos
 
-- Python **3.11** ou superior
+- Python 3.11 ou superior
 - PostgreSQL em execução
 - Banco criado (exemplo: `fionobre_db`)
 - Cliente OAuth Google (login Streamlit)
@@ -95,7 +94,7 @@ DB_NAME=fionobre_db
 ADMIN_EMAILS=seu_email@gmail.com
 ```
 
-> O arquivo `.env` **não** deve ser versionado.
+> O arquivo `.env` não deve ser versionado.
 
 ### 4. Login com Google
 
@@ -111,19 +110,22 @@ Depois:
 copy .streamlit\secrets.toml.example .streamlit\secrets.toml
 ```
 
-Preencha `client_id`, `client_secret` e uma `cookie_secret` longa. Contas novas recebem perfil `Visualizador`; e-mails em `ADMIN_EMAILS` recebem `Administrador`.
+Preencha `client_id`, `client_secret` e uma `cookie_secret` longa. Contas novas recebem perfil **Visualizador**; e-mails em `ADMIN_EMAILS` recebem **Administrador**.
 
-### 5. Banco de dados
+### 5. Banco de dados e Avaliação do BI
+
+Para criar as estruturas iniciais do sistema e os perfis padrão, execute:
 
 ```bash
-# Cria tabelas e perfis padrão
 python init_db.py
-
-# Popula massa de dados para demonstração / BI
-python scripts/seed_db.py
 ```
 
-> Atenção: `scripts/seed_db.py` recria o schema (`DROP SCHEMA`) antes de popular.
+> ⚠️ **IMPORTANTE PARA A AVALIAÇÃO:**
+> Para testar o módulo analítico (Dashboard) com dados realistas, é necessário popular o banco com o histórico retroativo de 90 dias (Vendas, Compras, Estoque e Financeiro). Execute o comando abaixo:
+
+```bash
+python seed.py
+```
 
 ### 6. Executar o ERP
 
@@ -131,7 +133,7 @@ python scripts/seed_db.py
 streamlit run app.py
 ```
 
-Abra `http://localhost:8501`.
+Abra [http://localhost:8501](http://localhost:8501).
 
 ---
 
@@ -142,13 +144,12 @@ Abra `http://localhost:8501`.
 - PostgreSQL
 - SQLAlchemy (ORM)
 - Python-dotenv
-- Faker (seed)
 
 ---
 
 ## Boas práticas
 
-- Nunca commitir `.env` nem `.streamlit/secrets.toml`
+- Nunca commitar `.env` nem `.streamlit/secrets.toml`
 - Credenciais só em variáveis de ambiente / secrets locais
 - Justificativa obrigatória (≥ 5 caracteres) no cancelamento
 
@@ -164,4 +165,4 @@ Projeto desenvolvido por:
 
 ## Licença
 
-Uso acadêmico na disciplina **Sistemas de Informação e Tecnologias (2026.1)**.
+Uso acadêmico na disciplina Sistemas de Informação e Tecnologias (2026.1).
