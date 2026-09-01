@@ -20,6 +20,7 @@ fionobre-erp/
 ├── app.py                  # Entrada da aplicação
 ├── init_db.py              # Cria tabelas e perfis padrão
 ├── seed.py                 # Povoamento automático de dados para o BI
+├── documentacao_2va.pdf    # Documentação Analítica e KPIs (Dashboard)
 ├── .env.example             # Modelo de credenciais (sem segredos reais)
 ├── requirements.txt
 └── README.md
@@ -34,6 +35,7 @@ fionobre-erp/
 | Gestão de Vendas | Histórico, conversão de orçamento, cancelamento e Dashboard |
 | Contas a Receber | Baixa de pagamentos e acompanhamento financeiro |
 | Gestão Logística | Entregas, rotas, rastreio e comprovantes |
+| BI & Indicadores | Hub centralizado de dashboards (Vendas, Financeiro, Estoque e PCP) |
 | Administração | Usuários, perfis e auditoria (conforme permissões) |
 
 ### Ciclo do pedido / orçamento
@@ -47,6 +49,16 @@ Orcamento  →  Confirmado  →  Concluído
 - **Orçamento**: não baixa estoque e não gera financeiro/logística.
 - **Confirmado**: baixa estoque e segue o fluxo operacional.
 - **Cancelamento**: permitido enquanto não houver pagamento `Pago` e a logística não estiver `Enviado`/`Entregue`.
+
+---
+
+## Documentação Analítica (2ª VA)
+
+O documento PDF exigido para a avaliação da 2ª VA (Business Intelligence) encontra-se na pasta raiz deste repositório. O arquivo contém:
+
+- A descrição técnica detalhada de todos os indicadores (KPIs) implementados.
+- Análise de resultados com capturas de tela do sistema em funcionamento.
+- Recomendações e proposições de melhoria para a indústria têxtil com base nos dados operacionais gerados.
 
 ---
 
@@ -159,9 +171,11 @@ Abra [http://localhost:8501](http://localhost:8501).
 
 Projeto desenvolvido por:
 
-- [@Maria Luiza Bezerra dos Santos](https://github.com/marialuizab11)
-- [@Matheus Cavalcante](https://github.com/Matheuuscavufape)
-- [@João Vitor](https://github.com/jvdss3)
+- @Maria Luiza Bezerra dos Santos
+- @Matheus Cavalcante
+- @João Vitor
+
+---
 
 ## Licença
 
