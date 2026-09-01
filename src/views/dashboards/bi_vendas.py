@@ -10,7 +10,11 @@ from src.services.dashboard_venda_service import (
 )
 
 def render_bi_vendas(db, usuario_atual):
-    st.markdown("### Visão Comercial")
+    st.markdown("### Visão Comercial e de Vendas")
+    st.caption(
+        "Acompanhe o faturamento filtrado, o ticket médio, a taxa de conversão "
+        "de orçamentos e a Curva ABC de produtos por impacto na receita."
+    )
 
     st.markdown("#### Filtros Gerenciais")
     col_d1, col_d2, col_d3, col_d4 = st.columns([1, 1, 1, 1])
